@@ -26,7 +26,9 @@ from bot import (
     list_sendable,
     output_paths,
     safe_filename,
+    LiveBoard,
     build_run_html,
+    build_run_rich_markdown,
     format_activity,
     format_bubble,
     format_snippet,
@@ -465,6 +467,106 @@ class QueueTests(unittest.TestCase):
             self.assertEqual(ran, ["left"])
             self.assertIn((7, REACTION_WORKING), telegram.reactions)
             self.assertIn((7, REACTION_DONE), telegram.reactions)
+
+
+class RichMessageTests(unittest.TestCase):
+    def test_rich_markdown_keeps_structure(self):
+        shown = build_run_rich_markdown(
+            model="grok_4",
+            project="lab_notes",
+            session="abcd1234",
+            elapsed=4,
+            body="# Plan\n\n- one\n- [x] two\n\n```python\nprint(1)\n```\n\n| Item | State |\n|:-----|:-----:|\n| queue | done |",
+            activity="",
+            snippet="",
+            phase="done",
+        )
+        self.assertIn("> **[abcd1234] lab\\_notes** · `grok_4` · ⌛ 4s", shown)
+        self.assertIn("# Plan", shown)
+        self.assertIn("- [x] two", shown)
+        self.assertIn("```python\nprint(1)\n```", shown)
+        self.assertIn("| queue | done |", shown)
+        self.assertIn("✅", shown)
+        self.assertNotIn("<b>", shown)
+
+    def test_rich_markdown_closes_a_live_fence_and_escapes_the_activity(self):
+        shown = build_run_rich_markdown(
+            model="auto",
+            project="lab",
+            session="abcd1234",
+            elapsed=1,
+            body="```python\nprint(1)",
+            activity="🟡 reading file_name.py",
+            snippet="print(1)",
+            phase="running",
+        )
+        self.assertTrue(shown.count("```") % 2 == 0)
+        self.assertIn("> *🟡 reading file\\_name.py*", shown)
+        self.assertIn("print(1)", shown)
+
+    def test_rejected_rich_message_uses_html(self):
+        class Api:
+            def __init__(self) -> None:
+                self.calls: list[str] = []
+
+            def send_rich(self, chat_id, markdown, reply_markup=None, reply_to=None):
+                self.calls.append("rich")
+                raise RuntimeError("telegram sendRichMessage failed: 400 can't parse entities")
+
+            def send_one(self, chat_id, text, reply_markup=None, html=False, reply_to=None):
+                self.calls.append("html")
+                self.html = html
+                self.text = text
+                return 15
+
+            def edit(self, *args, **kwargs):
+                self.calls.append("edit-html")
+
+            def edit_rich(self, *args, **kwargs):
+                self.calls.append("edit-rich")
+                raise RuntimeError("telegram editMessageText failed: 400 can't parse entities")
+
+        api = Api()
+        board = LiveBoard(api, 1, lambda message_id: None, model="auto", project="lab")
+        board.publish(force=True)
+        self.assertEqual(api.calls, ["rich", "html"])
+        self.assertTrue(api.html)
+        self.assertIn("<blockquote>", api.text)
+        self.assertFalse(board.use_rich)
+
+        board.finish("Done.\n\n# Kept", "done")
+        self.assertEqual(api.calls[:4], ["rich", "html", "edit-rich", "edit-html"])
+        self.assertFalse(board.use_rich)
+
+    def test_rich_edits_stick_when_telegram_accepts_them(self):
+        class Api:
+            def __init__(self) -> None:
+                self.calls: list[str] = []
+
+            def send_rich(self, chat_id, markdown, reply_markup=None, reply_to=None):
+                self.calls.append("rich")
+                self.markdown = markdown
+                return 21
+
+            def edit_rich(self, chat_id, message_id, markdown, reply_markup=None):
+                self.calls.append("edit-rich")
+                self.markdown = markdown
+                self.markup = reply_markup
+
+            def send_one(self, *args, **kwargs):
+                raise AssertionError("html fallback")
+
+            def edit(self, *args, **kwargs):
+                raise AssertionError("html edit")
+
+        api = Api()
+        board = LiveBoard(api, 1, lambda message_id: None, model="auto", project="lab")
+        board.publish(force=True)
+        board.finish("# Answer\n\n- done", "done")
+        self.assertEqual(api.calls, ["rich", "edit-rich"])
+        self.assertIn("# Answer", api.markdown)
+        self.assertIn("- done", api.markdown)
+        self.assertIsNotNone(api.markup)
 
 
 if __name__ == "__main__":

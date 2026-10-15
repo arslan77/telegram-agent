@@ -29,6 +29,7 @@ from pathlib import Path
 log = logging.getLogger("cursor-telegram")
 
 TELEGRAM_LIMIT = 3900
+RICH_LIMIT = 30000
 RUN_TIMEOUT_SEC = 45 * 60
 STATE_VERSION = 1
 MAX_DOWNLOAD = 20 * 1024 * 1024
@@ -463,6 +464,74 @@ def build_run_html(
         else:
             parts.append("<i>(no output)</i>")
     return "\n".join(parts)
+
+
+def escape_rich_text(text: str) -> str:
+    return "".join(f"\\{ch}" if ch in "*_`[]" else ch for ch in text)
+
+
+def close_rich_fence(text: str) -> str:
+    if text.count("```") % 2 == 1:
+        return text.rstrip() + "\n```"
+    return text
+
+
+def build_run_rich_markdown(
+    *,
+    model: str,
+    project: str,
+    session: str,
+    elapsed: int | None,
+    body: str,
+    activity: str,
+    snippet: str,
+    phase: str,
+) -> str:
+    """One rich-markdown document for the live run or the finished answer."""
+    running = phase == "running"
+    name = (model or "auto").strip() or "auto"
+    bits: list[str] = []
+    if session:
+        bits.append(f"[{escape_rich_text(session)}]")
+    if project:
+        bits.append(escape_rich_text(project))
+    title = " ".join(bits)
+    clock = ""
+    if elapsed is not None:
+        icon = "⏳" if running else "⌛"
+        clock = f" · {icon} {max(0, elapsed)}s"
+    if title:
+        header = f"> **{title}** · `{name.replace('`', "'")}`{clock}"
+    else:
+        header = f"> **{escape_rich_text(name)}**{clock}"
+    parts = [header]
+    if running:
+        preview = finalize_live(body)
+        if preview:
+            parts.append(close_rich_fence(preview))
+        if activity:
+            parts.append(f"> *{escape_rich_text(activity)}*")
+        if snippet:
+            safe_snippet = snippet.replace("```", "'''")
+            parts.append(f"```\n{safe_snippet}\n```")
+        if len(parts) == 1:
+            parts.append("*working…*")
+    else:
+        parts.append({"cancelled": "⛔", "error": "🔴"}.get(phase, "✅"))
+        if body.strip():
+            parts.append(close_rich_fence(body.strip()))
+        else:
+            parts.append("*(no output)*")
+    text = "\n\n".join(parts)
+    if len(text) <= RICH_LIMIT:
+        return text
+    clipped = text[: RICH_LIMIT - 2].rstrip() + "\n…"
+    return close_rich_fence(clipped)
+
+
+def rich_unavailable(detail: str) -> bool:
+    lowered = detail.lower()
+    return "sendrichmessage failed: 404" in lowered or "unknown method" in lowered
 
 
 def build_run_plain(
@@ -1189,6 +1258,41 @@ class Telegram:
             payload["reply_markup"] = reply_markup
         self.call("editMessageText", payload, timeout=30)
 
+    def send_rich(
+        self,
+        chat_id: int,
+        markdown: str,
+        reply_markup: dict | None = None,
+        reply_to: int | None = None,
+    ) -> int | None:
+        payload: dict = {
+            "chat_id": chat_id,
+            "rich_message": {"markdown": markdown[:32768]},
+        }
+        if reply_markup is not None:
+            payload["reply_markup"] = reply_markup
+        if isinstance(reply_to, int):
+            payload["reply_parameters"] = {"message_id": reply_to, "allow_sending_without_reply": True}
+        result = self.call("sendRichMessage", payload, timeout=30)
+        message_id = result.get("result", {}).get("message_id")
+        return message_id if isinstance(message_id, int) else None
+
+    def edit_rich(
+        self,
+        chat_id: int,
+        message_id: int,
+        markdown: str,
+        reply_markup: dict | None = None,
+    ) -> None:
+        payload: dict = {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "rich_message": {"markdown": markdown[:32768]},
+        }
+        if reply_markup is not None:
+            payload["reply_markup"] = reply_markup
+        self.call("editMessageText", payload, timeout=30)
+
     def delete_many(self, chat_id: int, message_ids: list[int]) -> None:
         for start in range(0, len(message_ids), 100):
             chunk = message_ids[start : start + 100]
@@ -1236,6 +1340,8 @@ class LiveBoard:
         self.dirty = False
         self.timer_slot = -1
         self.extras_sent = False
+        self.use_rich = True
+        self.rich_dead = False
 
     def set_session(self, session_id: str) -> None:
         short = session_id.strip()[:8]
@@ -1273,6 +1379,8 @@ class LiveBoard:
         self.phase = phase
         self.activity = ""
         self.snippet = ""
+        if not self.use_rich and not self.rich_dead:
+            self.use_rich = True
         self.publish(force=True)
 
     def publish(self, force: bool = False) -> None:
@@ -1312,6 +1420,8 @@ class LiveBoard:
 
     def _present(self) -> None:
         fields = self._view_args()
+        if self.use_rich and self._present_rich(fields):
+            return
         formatted = build_run_html(**fields)
         markup = None if self.phase == "running" else RUN_KEYBOARD
         if self.phase == "running" or len(formatted) <= TELEGRAM_LIMIT:
@@ -1336,6 +1446,47 @@ class LiveBoard:
             )
         self.message_id = anchor
         self.visible = anchor_visible
+
+    def _present_rich(self, fields: dict) -> bool:
+        markdown = build_run_rich_markdown(**fields)
+        markup = None if self.phase == "running" else RUN_KEYBOARD
+        marker = "rich\n" + markdown + ("|buttons" if markup else "")
+        if marker == self.visible and self.message_id is not None:
+            return True
+        if self.message_id is None:
+            try:
+                message_id = self.telegram.send_rich(
+                    self.chat_id,
+                    markdown,
+                    reply_markup=markup,
+                    reply_to=self.reply_to,
+                )
+            except RuntimeError as exc:
+                detail = str(exc)
+                log.info("rich send failed, using html: %s", detail)
+                if rich_unavailable(detail):
+                    self.rich_dead = True
+                self.use_rich = False
+                return False
+            if message_id is None:
+                self.use_rich = False
+                return False
+            self.message_id = message_id
+            self.visible = marker
+            self.on_message(message_id)
+            return True
+        try:
+            self.telegram.edit_rich(self.chat_id, self.message_id, markdown, reply_markup=markup)
+        except RuntimeError as exc:
+            detail = str(exc)
+            if "message is not modified" in detail:
+                self.visible = marker
+                return True
+            log.info("rich edit failed, using html: %s", detail)
+            self.use_rich = False
+            return False
+        self.visible = marker
+        return True
 
     def _send_piece(
         self,
