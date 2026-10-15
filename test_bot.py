@@ -1,18 +1,39 @@
+import json
 import tempfile
 import unittest
 from pathlib import Path
 
 from bot import (
     ConfigError,
+    Transcript,
+    attachment_from_message,
+    changed_media,
+    consume_event,
     contact_phone,
+    file_page,
+    forget_messages,
+    inbound_prompt,
+    inside_workspace,
+    list_sendable,
+    output_paths,
+    safe_filename,
+    build_run_html,
+    format_activity,
+    format_bubble,
+    format_snippet,
     is_cloud_handoff,
+    message_header,
     mask_phone,
+    message_ids_for_clear,
     parse_allowlist,
     parse_command,
     redact,
     resolve_workspace,
+    split_live,
     split_text,
+    tool_entry,
     tool_label,
+    tool_phrase,
 )
 
 
@@ -105,11 +126,243 @@ class OutputTests(unittest.TestCase):
         label = tool_label({"writeToolCall": {"args": {"path": "a.py", "fileText": "SECRET TOKEN"}}})
         self.assertEqual(label, "write a.py")
         self.assertNotIn("SECRET", label)
+        phrase = tool_phrase({"readToolCall": {"args": {"path": "/home/a/README.md", "fileText": "SECRET"}}})
+        self.assertEqual(phrase, "Reading README.md")
+        self.assertNotIn("SECRET", phrase)
+
+    def test_transcript_appends_words_and_tools_once(self):
+        log = Transcript()
+        self.assertTrue(log.add_tool("Reading README.md"))
+        self.assertFalse(log.add_tool("Reading README.md"))
+        self.assertTrue(log.add_delta("Hello"))
+        self.assertTrue(log.add_delta(" there"))
+        self.assertEqual(log.render(), "Reading README.md\n\nHello there")
+        self.assertFalse(log.add_complete("Hello there"))
+        self.assertEqual(log.render(), "Reading README.md\n\nHello there")
+
+    def test_streamed_words_keep_the_leading_space(self):
+        board_parts: list[str] = []
+
+        class Board:
+            def __init__(self) -> None:
+                self.transcript = Transcript()
+
+            def stream(self, text: str) -> None:
+                self.transcript.add_delta(text)
+                board_parts.append(self.transcript.render())
+
+            def complete(self, text: str) -> None:
+                self.transcript.add_complete(text)
+
+            def note(self, phrase: str) -> None:
+                self.transcript.add_tool(phrase)
+
+        board = Board()
+        acc: dict = {}
+        for word in ("I", " can't", " comply", "."):
+            consume_event(
+                json.dumps(
+                    {
+                        "type": "assistant",
+                        "timestamp_ms": 1,
+                        "message": {"content": [{"type": "text", "text": word}]},
+                    }
+                ),
+                acc,
+                board,
+            )
+        self.assertEqual(board.transcript.render(), "I can't comply.")
+
+    def test_commands_render_as_telegram_code(self):
+        shown = format_bubble(
+            "I'll open the chat.\n\n"
+            'Running curl -sS "https://example.com?q=1&x=2"\n\n'
+            "Reading README.md\n\n"
+            "The chat is public: **https://example.com/tunnel**"
+        )
+        self.assertIn('<pre><code class="language-bash">curl -sS "https://example.com?q=1&amp;x=2"</code></pre>', shown)
+        self.assertIn("Reading <code>README.md</code>", shown)
+        self.assertIn('<b><a href="https://example.com/tunnel">https://example.com/tunnel</a></b>', shown)
+        self.assertIn("I'll open the chat.", shown)
+        self.assertNotIn("**", shown)
+
+    def test_markdown_renders_headings_lists_and_fences(self):
+        shown = format_bubble(
+            "# Plan\n\n- one\n- [x] two\n\nSee [docs](https://example.com/docs)\n\n```python\nprint(1)\n```"
+        )
+        self.assertIn("<b>Plan</b>", shown)
+        self.assertIn("• one", shown)
+        self.assertIn("• ☑ two", shown)
+        self.assertIn('<a href="https://example.com/docs">docs</a>', shown)
+        self.assertIn('<pre><code class="language-python">print(1)</code></pre>', shown)
+
+    def test_edit_snippet_shows_removed_and_added_lines(self):
+        call = {
+            "strReplaceToolCall": {
+                "args": {
+                    "path": "bot.py",
+                    "old_string": "alpha",
+                    "new_string": "beta",
+                    "fileText": "SECRET TOKEN",
+                }
+            }
+        }
+        entry = tool_entry(call)
+        self.assertIn("Editing bot.py", entry)
+        self.assertIn("🔴 -alpha", entry)
+        self.assertIn("🟢 +beta", entry)
+        self.assertNotIn("SECRET", entry)
+        shown = format_bubble(entry)
+        self.assertIn("Editing <code>bot.py</code>", shown)
+        self.assertIn("<pre><code>🔴 -alpha\n🟢 +beta</code></pre>", shown)
+
+    def test_header_names_the_model(self):
+        self.assertEqual(
+            message_header("grok-4.7-high"),
+            "<blockquote><b>grok-4.7-high</b></blockquote>",
+        )
+        shown = message_header("grok-4.7-high", project="lab", session="abcd1234", elapsed=12)
+        self.assertIn("[abcd1234]", shown)
+        self.assertIn("lab", shown)
+        self.assertIn("grok-4.7-high", shown)
+        self.assertIn("⏳ 12s", shown)
+
+    def test_live_view_keeps_one_status_line_then_the_final_answer(self):
+        shell = {
+            "shellToolCall": {
+                "args": {"command": "echo hi"},
+                "result": {"success": {"stdout": "hi\n", "stderr": "warn\n", "exitCode": 0}},
+            }
+        }
+        self.assertEqual(format_activity(shell, done=False), "🟡 shell: echo hi")
+        self.assertEqual(format_activity(shell, done=True), "✅ shell: echo hi")
+        snippet = format_snippet(shell)
+        self.assertIn("🟢 hi", snippet)
+        self.assertIn("🔴 warn", snippet)
+        diff = {
+            "shellToolCall": {
+                "args": {"command": "git diff"},
+                "result": {"success": {"stdout": "@@ -1 +1 @@\n-old\n+new\n", "stderr": "", "exitCode": 0}},
+            }
+        }
+        colored = format_snippet(diff)
+        self.assertIn("🔷 @@ -1 +1 @@", colored)
+        self.assertIn("🔴 -old", colored)
+        self.assertIn("🟢 +new", colored)
+        running = build_run_html(
+            model="grok-4.7-high",
+            project="lab",
+            session="abcd1234",
+            elapsed=3,
+            body="Opening the tunnel.",
+            activity="🟡 shell: echo hi",
+            snippet="echo hi",
+            phase="running",
+        )
+        self.assertIn("Opening the tunnel.", running)
+        self.assertIn("🟡 shell: echo hi", running)
+        self.assertIn("<pre><code>echo hi</code></pre>", running)
+        done = build_run_html(
+            model="grok-4.7-high",
+            project="lab",
+            session="abcd1234",
+            elapsed=8,
+            body="The tunnel is up.",
+            activity="🟡 shell: echo hi",
+            snippet="echo hi",
+            phase="done",
+        )
+        self.assertIn("✅", done)
+        self.assertIn("The tunnel is up.", done)
+        self.assertNotIn("shell: echo hi", done)
+        self.assertNotIn("<pre><code>echo hi</code></pre>", done)
+
+    def test_split_live_starts_a_second_message(self):
+        head, tail = split_live("one\ntwo\nthree\nfour", 10)
+        self.assertLessEqual(len(head), 10)
+        self.assertTrue(tail)
+        self.assertNotIn(tail, head)
+
+    def test_clear_forgets_messages_and_keeps_the_cursor_session(self):
+        row = {"session_id": "chat-1", "workspace": "/home/a/lab", "mode": "agent", "message_ids": [4, 4, "nope", 9]}
+        self.assertEqual(message_ids_for_clear(row, 11), [4, 9, 11])
+        kept = forget_messages(row)
+        self.assertEqual(kept["session_id"], "chat-1")
+        self.assertEqual(kept["workspace"], "/home/a/lab")
+        self.assertEqual(kept["message_ids"], [])
+        self.assertEqual(row["message_ids"], [4, 4, "nope", 9])
 
     def test_split_and_redact(self):
         parts = split_text("a\n" + ("b" * 4000), limit=100)
         self.assertGreater(len(parts), 1)
         self.assertNotIn("super-secret", redact("token super-secret here", "super-secret"))
+
+
+class FileTests(unittest.TestCase):
+    def test_safe_filename_drops_directories(self):
+        self.assertEqual(safe_filename("../../etc/passwd"), "passwd")
+        self.assertNotIn("/", safe_filename("a/b.mp3"))
+
+    def test_photo_uses_the_largest_size_and_caption(self):
+        attachment = attachment_from_message(
+            {
+                "caption": "what is this",
+                "photo": [
+                    {"file_id": "small", "file_size": 10},
+                    {"file_id": "large", "file_size": 99},
+                ],
+            }
+        )
+        self.assertIsNotNone(attachment)
+        assert attachment is not None
+        self.assertEqual(attachment["file_id"], "large")
+        self.assertEqual(attachment["caption"], "what is this")
+
+    def test_prompts_distinguish_images_and_audio(self):
+        image = inbound_prompt(Path("/home/a/lab/.cursor-telegram/inbound/pic.jpg"), "")
+        audio = inbound_prompt(Path("/home/a/lab/.cursor-telegram/inbound/voice.ogg"), "transcribe this")
+        self.assertIn("Read this file and look at it", image)
+        self.assertIn("audio file", audio)
+        self.assertIn("transcribe this", audio)
+
+    def test_output_paths_skip_reads_and_keep_new_images(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            image = root / "pic.png"
+            image.write_bytes(b"png")
+            read = {"readToolCall": {"args": {"path": str(image)}}}
+            self.assertEqual(output_paths(read, root), [])
+            secret = root / ".env"
+            secret.write_bytes(b"TOKEN=1")
+            leaked = {"writeToolCall": {"args": {"path": str(secret)}}}
+            self.assertEqual(output_paths(leaked, root), [])
+            made = {
+                "generateImageToolCall": {
+                    "args": {"file_path": "pic.png"},
+                    "result": {"success": {"file_path": "pic.png"}},
+                }
+            }
+            self.assertEqual(output_paths(made, root), [image.resolve()])
+            outside = inside_workspace(root, "../escape.png")
+            self.assertIsNone(outside)
+
+    def test_changed_media_finds_new_audio_and_list_skips_secrets(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".env").write_bytes(b"SECRET=1")
+            (root / ".git").mkdir()
+            (root / ".git" / "song.mp3").write_bytes(b"nope")
+            before = {}
+            note = root / "note.mp3"
+            note.write_bytes(b"abc")
+            found = changed_media(before, root)
+            self.assertEqual(found, [note.resolve()])
+            listed = list_sendable(root, "note")
+            self.assertEqual(listed, [note.resolve()])
+            self.assertEqual(list_sendable(root, ".env"), [])
+            page, text = file_page(listed, 0, root)
+            self.assertEqual(page, [note.resolve()])
+            self.assertIn("note.mp3", text)
 
 
 if __name__ == "__main__":
