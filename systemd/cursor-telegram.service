@@ -1,0 +1,19 @@
+[Unit]
+Description=Allowlisted Telegram bridge to the local Cursor agent
+After=network-online.target
+
+[Service]
+Type=simple
+Environment=HOME=%h
+Environment=PATH=%h/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+EnvironmentFile=%h/.config/cursor-telegram/env
+WorkingDirectory=%h
+UMask=0077
+NoNewPrivileges=true
+ExecStart=/usr/bin/python3 %h/alienware-lab/experiments/cursor-telegram/bot.py
+Restart=on-failure
+RestartSec=5
+RestartPreventExitStatus=78
+
+[Install]
+WantedBy=default.target
