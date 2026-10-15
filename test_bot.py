@@ -1,10 +1,19 @@
 import json
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 
 from bot import (
+    Bridge,
     ConfigError,
+    MAX_QUEUE,
+    REACTION_CANCELLED,
+    Prompt,
+    REACTION_DONE,
+    REACTION_QUEUED,
+    REACTION_WORKING,
+    State,
     Transcript,
     attachment_from_message,
     changed_media,
@@ -363,6 +372,99 @@ class FileTests(unittest.TestCase):
             page, text = file_page(listed, 0, root)
             self.assertEqual(page, [note.resolve()])
             self.assertIn("note.mp3", text)
+
+
+class FakeTelegram:
+    def __init__(self) -> None:
+        self.reactions: list[tuple[int | None, str]] = []
+        self.sent: list[str] = []
+
+    def react(self, chat_id: int, message_id: int | None, emoji: str) -> None:
+        self.reactions.append((message_id, emoji))
+
+    def send_one(self, chat_id: int, text: str, reply_markup=None, html: bool = False, reply_to=None) -> int:
+        self.sent.append(text)
+        return 1
+
+
+class QueueTests(unittest.TestCase):
+    def bridge(self, telegram: FakeTelegram, root: Path) -> Bridge:
+        return Bridge(telegram, State(root / "state.json"), set(), "/bin/true", root)
+
+    def test_second_message_waits_and_keeps_its_own_reaction(self):
+        telegram = FakeTelegram()
+        started = threading.Event()
+        release = threading.Event()
+        seen: list[tuple[str, bool]] = []
+        with tempfile.TemporaryDirectory() as tmp:
+            bridge = self.bridge(telegram, Path(tmp))
+
+            def execute(chat_id, user_id, text, message_id=None):
+                seen.append((text, bridge.runner.cancel.is_set()))
+                if text == "first":
+                    started.set()
+                    self.assertTrue(release.wait(2))
+                    bridge.runner.stop()
+                    return "cancelled"
+                return "done"
+
+            bridge.execute = execute
+            bridge.submit(1, 2, "first", 10)
+            self.assertTrue(started.wait(2))
+            bridge.submit(1, 2, "second", 11)
+            self.assertEqual(bridge.queued(), 1)
+            self.assertIn((11, REACTION_QUEUED), telegram.reactions)
+            self.assertIn((10, REACTION_WORKING), telegram.reactions)
+            release.set()
+            self.assertIsNotNone(bridge.runner.thread)
+            bridge.runner.thread.join(3)
+            self.assertEqual(seen, [("first", False), ("second", False)])
+            self.assertEqual(bridge.queued(), 0)
+            self.assertIn((10, REACTION_CANCELLED), telegram.reactions)
+            self.assertIn((11, REACTION_WORKING), telegram.reactions)
+            self.assertIn((11, REACTION_DONE), telegram.reactions)
+
+    def test_queue_stops_at_the_limit(self):
+        telegram = FakeTelegram()
+        started = threading.Event()
+        release = threading.Event()
+        with tempfile.TemporaryDirectory() as tmp:
+            bridge = self.bridge(telegram, Path(tmp))
+
+            def execute(chat_id, user_id, text, message_id=None):
+                started.set()
+                release.wait(2)
+                return "error"
+
+            bridge.execute = execute
+            bridge.submit(1, 2, "running", 1)
+            self.assertTrue(started.wait(2))
+            for index in range(MAX_QUEUE):
+                bridge.submit(1, 2, f"queued-{index}", 100 + index)
+            bridge.submit(1, 2, "overflow", 999)
+            self.assertEqual(bridge.queued(), MAX_QUEUE)
+            self.assertTrue(any("Queue is full" in text for text in telegram.sent))
+            release.set()
+            bridge.runner.thread.join(3)
+
+    def test_pump_starts_a_prompt_left_behind(self):
+        telegram = FakeTelegram()
+        with tempfile.TemporaryDirectory() as tmp:
+            bridge = self.bridge(telegram, Path(tmp))
+            ran: list[str] = []
+
+            def execute(chat_id, user_id, text, message_id=None):
+                ran.append(text)
+                return "done"
+
+            bridge.execute = execute
+            bridge.pending.append(Prompt(1, 2, "left", 7))
+            bridge.pump()
+            self.assertIsNotNone(bridge.runner.thread)
+            bridge.runner.thread.join(3)
+            self.assertEqual(ran, ["left"])
+            self.assertIn((7, REACTION_WORKING), telegram.reactions)
+            self.assertIn((7, REACTION_DONE), telegram.reactions)
 
 
 if __name__ == "__main__":

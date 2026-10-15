@@ -23,6 +23,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from collections import deque
 from pathlib import Path
 
 log = logging.getLogger("cursor-telegram")
@@ -33,6 +34,12 @@ STATE_VERSION = 1
 MAX_DOWNLOAD = 20 * 1024 * 1024
 MAX_UPLOAD = 45 * 1024 * 1024
 FILE_PAGE = 6
+MAX_QUEUE = 20
+REACTION_QUEUED = "👀"
+REACTION_WORKING = "⚡"
+REACTION_DONE = "👍"
+REACTION_CANCELLED = "😐"
+REACTION_ERROR = "👎"
 SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", "dist", "build"}
 MEDIA_EXT = {
     ".png", ".jpg", ".jpeg", ".webp", ".gif",
@@ -1053,15 +1060,34 @@ class Telegram:
         text: str,
         reply_markup: dict | None = None,
         html: bool = False,
+        reply_to: int | None = None,
     ) -> int | None:
         payload: dict = {"chat_id": chat_id, "text": text[:4096]}
         if html:
             payload["parse_mode"] = "HTML"
         if reply_markup is not None:
             payload["reply_markup"] = reply_markup
+        if isinstance(reply_to, int):
+            payload["reply_parameters"] = {"message_id": reply_to, "allow_sending_without_reply": True}
         result = self.call("sendMessage", payload, timeout=30)
         message_id = result.get("result", {}).get("message_id")
         return message_id if isinstance(message_id, int) else None
+
+    def react(self, chat_id: int, message_id: int | None, emoji: str) -> None:
+        if not isinstance(message_id, int) or not emoji:
+            return
+        try:
+            self.call(
+                "setMessageReaction",
+                {
+                    "chat_id": chat_id,
+                    "message_id": message_id,
+                    "reaction": [{"type": "emoji", "emoji": emoji}],
+                },
+                timeout=15,
+            )
+        except RuntimeError as exc:
+            log.info("reaction %s failed: %s", emoji, exc)
 
     def send(self, chat_id: int, text: str, reply_markup: dict | None = None) -> int | None:
         first_id = None
@@ -1189,12 +1215,14 @@ class LiveBoard:
         on_message,
         model: str = "auto",
         project: str = "",
+        reply_to: int | None = None,
     ) -> None:
         self.telegram = telegram
         self.chat_id = chat_id
         self.on_message = on_message
         self.model = (model or "auto").strip() or "auto"
         self.project = project or "workspace"
+        self.reply_to = reply_to if isinstance(reply_to, int) else None
         self.session_label = "new"
         self.transcript = Transcript()
         self.started = time.time()
@@ -1323,7 +1351,13 @@ class LiveBoard:
             return
         if self.message_id is None:
             try:
-                message_id = self.telegram.send_one(self.chat_id, show, reply_markup=markup, html=html)
+                message_id = self.telegram.send_one(
+                    self.chat_id,
+                    show,
+                    reply_markup=markup,
+                    html=html,
+                    reply_to=self.reply_to,
+                )
             except RuntimeError as exc:
                 if html and plain_fields is not None and html_rejected(str(exc)):
                     self._send_piece(build_run_plain(**plain_fields)[:4096], html=False, markup=markup)
@@ -1428,6 +1462,11 @@ class Runner:
         if proc is not None:
             stop_process(proc)
 
+    def reset_cancel(self) -> None:
+        with self.lock:
+            self.cancel.clear()
+            self.proc = None
+
 
 def stop_process(proc: subprocess.Popen) -> None:
     if proc.poll() is not None:
@@ -1475,7 +1514,7 @@ HELP = "\n".join(
         "",
         "/status",
         "/new — start a fresh chat",
-        "/cancel — stop the current run",
+        "/cancel — stop the current run. Queued messages still run",
         "/mode agent — edit files and run commands",
         "/mode ask — read only",
         "/mode plan — plan only",
@@ -1486,6 +1525,8 @@ HELP = "\n".join(
         "",
         "Send a photo, file, video, or audio message and Cursor receives it.",
         "Any other text message is sent to that local session.",
+        "A message sent while Cursor is busy waits its turn.",
+        "👀 queued  ·  ⚡ working  ·  👍 done",
     ]
 )
 
@@ -1497,6 +1538,14 @@ SHARE = {
 REMOVE_KEYBOARD = {"remove_keyboard": True}
 
 
+class Prompt:
+    def __init__(self, chat_id: int, user_id: int, text: str, message_id: int | None) -> None:
+        self.chat_id = chat_id
+        self.user_id = user_id
+        self.text = text
+        self.message_id = message_id
+
+
 class Bridge:
     def __init__(self, telegram: Telegram, state: State, allow: set[str], agent: str, home: Path) -> None:
         self.telegram = telegram
@@ -1505,8 +1554,14 @@ class Bridge:
         self.agent = agent
         self.home = home
         self.runner = Runner()
+        self.pending: deque[Prompt] = deque()
+        self.queue_lock = threading.Lock()
         self.drop_session = False
         self.default_workspace = default_workspace(home)
+
+    def queued(self) -> int:
+        with self.queue_lock:
+            return len(self.pending)
 
     def chat(self, user_id: int) -> dict:
         key = str(user_id)
@@ -1585,7 +1640,8 @@ class Bridge:
             self.drain()
         log.info("bridge up, %d allowlisted numbers", len(self.allow))
         while True:
-            timeout = 2 if self.runner.busy() else 25
+            self.pump()
+            timeout = 2 if self.runner.busy() or self.queued() else 25
             try:
                 updates = self.telegram.call(
                     "getUpdates",
@@ -1747,7 +1803,7 @@ class Bridge:
             return
         attachment = attachment_from_message(message)
         if attachment is not None:
-            self.on_file(chat_id, user_id, attachment)
+            self.on_file(chat_id, user_id, attachment, incoming if isinstance(incoming, int) else None)
             return
         text = message.get("text")
         if not isinstance(text, str) or not text.strip():
@@ -1779,10 +1835,7 @@ class Bridge:
             REMOVE_KEYBOARD,
         )
 
-    def on_file(self, chat_id: int, user_id: int, attachment: dict) -> None:
-        if self.runner.busy():
-            self.say(user_id, chat_id, "A run is already in progress. /cancel to stop it.")
-            return
+    def on_file(self, chat_id: int, user_id: int, attachment: dict, message_id: int | None = None) -> None:
         size = attachment.get("size") or 0
         if isinstance(size, int) and size > MAX_DOWNLOAD:
             self.say(user_id, chat_id, "Telegram only lets the bot download files up to 20 MB.")
@@ -1800,8 +1853,7 @@ class Bridge:
             self.say(user_id, chat_id, "Could not download that file.")
             return
         prompt = inbound_prompt(dest, str(attachment.get("caption") or ""))
-        if not self.runner.start(lambda: self._guarded(chat_id, user_id, prompt)):
-            self.say(user_id, chat_id, "A run is already in progress. /cancel to stop it.")
+        self.submit(chat_id, user_id, prompt, message_id)
 
     def show_files(self, chat_id: int, user_id: int, query: str, page: int) -> None:
         try:
@@ -1903,17 +1955,23 @@ class Bridge:
         if command == "/cancel":
             if self.runner.busy():
                 self.runner.stop()
-                self.say(user_id, chat_id, "Stopping the current run.")
+                waiting = self.queued()
+                if waiting == 1:
+                    note = "Stopping the current run. 1 message is still queued."
+                elif waiting:
+                    note = f"Stopping the current run. {waiting} messages are still queued."
+                else:
+                    note = "Stopping the current run."
+                self.say(user_id, chat_id, note)
             else:
                 self.say(user_id, chat_id, "Nothing is running.")
             return
         if command == "/status":
             self.say(user_id, chat_id, self.status_text(user_id))
             return
-        if command in {"/new", "/mode", "/workspace"} and self.runner.busy():
-            self.say(user_id, chat_id, "A run is in progress. /cancel to stop it.")
-            return
         if command == "/new":
+            if self.runner.busy():
+                self.drop_session = True
             self.chat(user_id)["session_id"] = ""
             self.state.save()
             self.say(user_id, chat_id, "Next message starts a fresh chat.")
@@ -1934,21 +1992,73 @@ class Bridge:
         if is_cloud_handoff(text):
             self.say(user_id, chat_id, "Cloud handoff is off. This bot only runs Cursor on this machine.")
             return
-        if not self.runner.start(lambda: self._guarded(chat_id, user_id, text)):
-            self.say(user_id, chat_id, "A run is already in progress. /cancel to stop it.")
+        self.submit(chat_id, user_id, text, message_id)
 
-    def _guarded(self, chat_id: int, user_id: int, text: str) -> None:
-        try:
-            self.execute(chat_id, user_id, text)
-        except ConfigError as exc:
-            log.error("%s", exc)
-            os._exit(78)
-        except Exception:
-            log.exception("run failed")
+    def submit(self, chat_id: int, user_id: int, text: str, message_id: int | None) -> None:
+        prompt = Prompt(chat_id, user_id, text, message_id)
+        with self.queue_lock:
+            if self.runner.busy():
+                if len(self.pending) >= MAX_QUEUE:
+                    full = True
+                    queued = False
+                else:
+                    self.pending.append(prompt)
+                    full = False
+                    queued = True
+            else:
+                full = False
+                queued = False
+        if full:
+            self.say(user_id, chat_id, f"Queue is full ({MAX_QUEUE}). Wait for a run to finish.")
+            return
+        if queued:
+            self.telegram.react(chat_id, message_id, REACTION_QUEUED)
+            return
+        self._launch(prompt)
+
+    def pump(self) -> None:
+        if self.runner.busy():
+            return
+        with self.queue_lock:
+            if not self.pending:
+                return
+            prompt = self.pending.popleft()
+        self._launch(prompt)
+
+    def _launch(self, prompt: Prompt) -> None:
+        self.telegram.react(prompt.chat_id, prompt.message_id, REACTION_WORKING)
+        if self.runner.start(lambda: self._drain(prompt)):
+            return
+        with self.queue_lock:
+            self.pending.appendleft(prompt)
+        self.telegram.react(prompt.chat_id, prompt.message_id, REACTION_QUEUED)
+
+    def _drain(self, prompt: Prompt | None) -> None:
+        while prompt is not None:
+            self.telegram.react(prompt.chat_id, prompt.message_id, REACTION_WORKING)
+            phase = "error"
             try:
-                self.say(user_id, chat_id, "The bridge hit an error before Cursor finished.")
+                phase = self.execute(prompt.chat_id, prompt.user_id, prompt.text, prompt.message_id)
+            except ConfigError as exc:
+                log.error("%s", exc)
+                os._exit(78)
             except Exception:
-                log.exception("could not report the error")
+                log.exception("run failed")
+                try:
+                    self.say(prompt.user_id, prompt.chat_id, "The bridge hit an error before Cursor finished.")
+                except Exception:
+                    log.exception("could not report the error")
+                phase = "error"
+            emoji = {
+                "done": REACTION_DONE,
+                "cancelled": REACTION_CANCELLED,
+                "error": REACTION_ERROR,
+            }.get(phase, REACTION_ERROR)
+            self.telegram.react(prompt.chat_id, prompt.message_id, emoji)
+            with self.queue_lock:
+                prompt = self.pending.popleft() if self.pending else None
+            if prompt is not None:
+                self.runner.reset_cancel()
 
     def set_mode(self, chat_id: int, user_id: int, rest: str) -> None:
         row = self.chat(user_id)
@@ -1973,6 +2083,8 @@ class Bridge:
         except ValueError as exc:
             self.say(user_id, chat_id, str(exc))
             return
+        if self.runner.busy():
+            self.drop_session = True
         row["workspace"] = str(path)
         row["session_id"] = ""
         self.state.save()
@@ -1984,6 +2096,12 @@ class Bridge:
         account = self.account_line()
         session = row.get("session_id") or "none"
         running = "running" if self.runner.busy() else "idle"
+        waiting = self.queued()
+        run_line = f"Run {running}"
+        if waiting == 1:
+            run_line += ", 1 queued"
+        elif waiting:
+            run_line += f", {waiting} queued"
         return "\n".join(
             [
                 account,
@@ -1992,7 +2110,7 @@ class Bridge:
                 f"Mode {row.get('mode')}",
                 f"Model {cursor_model()}",
                 f"Chat {session}",
-                f"Run {running}",
+                run_line,
             ]
         )
 
@@ -2036,7 +2154,7 @@ class Bridge:
         env["PATH"] = local_bin + os.pathsep + env.get("PATH", "")
         return env
 
-    def execute(self, chat_id: int, user_id: int, prompt: str) -> None:
+    def execute(self, chat_id: int, user_id: int, prompt: str, message_id: int | None = None) -> str:
         row = self.chat(user_id)
         workspace = str(row.get("workspace") or self.default_workspace)
         mode = str(row.get("mode") or "agent")
@@ -2045,13 +2163,14 @@ class Bridge:
             resolve_workspace(workspace, self.home)
         except ValueError as exc:
             self.say(user_id, chat_id, str(exc))
-            return
+            return "error"
         board = LiveBoard(
             self.telegram,
             chat_id,
-            lambda message_id: self.remember(user_id, message_id),
+            lambda sent_id: self.remember(user_id, sent_id),
             model=cursor_model(),
             project=Path(workspace).name,
+            reply_to=message_id,
         )
         board.publish(force=True)
         sent: set[str] = set()
@@ -2076,6 +2195,7 @@ class Bridge:
             self.chat(user_id)["session_id"] = new_session
             self.state.save()
         board.flush()
+        return board.phase if board.phase in {"done", "cancelled", "error"} else "done"
 
     def spawn(
         self,
