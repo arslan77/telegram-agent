@@ -5,7 +5,7 @@ Only a private chat whose sender shares a phone number on TELEGRAM_ALLOWED_PHONE
 can run the agent. Everyone else gets no work done. Runs use `agent -p` on this
 host. A leading & is rejected so the chat cannot be handed to a cloud agent.
 
-The bridge itself lives in the cursor_telegram package. This file is the process
+The bridge itself lives in the app package. This file is the process
 entry the user service starts.
 """
 
@@ -14,8 +14,8 @@ from __future__ import annotations
 import logging
 import sys
 
-from cursor_telegram.access import ConfigError
-from cursor_telegram.cli import main
+from app.access import ConfigError
+from app.cli import main
 
 if __name__ == "__main__":
     try:

@@ -7,11 +7,11 @@ import logging
 import os
 import signal
 
-from cursor_telegram.access import find_agent, load_config
-from cursor_telegram.bridge import Bridge
-from cursor_telegram.client import Telegram
-from cursor_telegram.constants import log
-from cursor_telegram.state import State
+from app.access import find_agent, load_config
+from app.bridge import Bridge
+from app.client import Telegram
+from app.constants import log
+from app.state import State
 
 
 def main() -> None:

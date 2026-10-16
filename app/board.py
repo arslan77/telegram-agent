@@ -5,11 +5,11 @@ from __future__ import annotations
 import secrets
 import time
 
-from cursor_telegram.activity import format_activity, format_snippet
-from cursor_telegram.client import Telegram
-from cursor_telegram.constants import RICH_LIMIT, RUN_KEYBOARD, TELEGRAM_LIMIT, log
-from cursor_telegram.render import build_run_html, build_run_plain, build_run_rich_markdown, html_rejected, largest_rich_prefix, rich_unavailable
-from cursor_telegram.transcript import Transcript, chunk_html
+from app.activity import format_activity, format_snippet
+from app.client import Telegram
+from app.constants import RICH_LIMIT, RUN_KEYBOARD, TELEGRAM_LIMIT, log
+from app.render import build_run_html, build_run_plain, build_run_rich_markdown, html_rejected, largest_rich_prefix, rich_unavailable
+from app.transcript import Transcript, chunk_html
 
 
 class LiveBoard:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from cursor_telegram.constants import TELEGRAM_LIMIT
+from app.constants import TELEGRAM_LIMIT
 
 
 class Transcript:

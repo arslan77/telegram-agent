@@ -4,7 +4,7 @@ import threading
 import unittest
 from pathlib import Path
 
-from cursor_telegram import (
+from app import (
     Bridge,
     ConfigError,
     MAX_QUEUE,

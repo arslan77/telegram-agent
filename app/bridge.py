@@ -12,16 +12,16 @@ import subprocess
 import threading
 import time
 
-from cursor_telegram.access import ConfigError, contact_phone, cursor_model, default_workspace, is_cloud_handoff, mask_phone, parse_command, redact, resolve_workspace, split_text
-from cursor_telegram.board import LiveBoard
-from cursor_telegram.chatlog import message_ids_for_clear
-from cursor_telegram.client import Telegram
-from cursor_telegram.constants import ALLOWED_UPDATES, FILE_PAGE, HELP, MAX_DOWNLOAD, MAX_QUEUE, MAX_UPLOAD, REACTION_CANCELLED, REACTION_DONE, REACTION_ERROR, REACTION_QUEUED, REACTION_WORKING, REMOVE_KEYBOARD, RUN_TIMEOUT_SEC, SHARE, log
-from cursor_telegram.events import consume_event
-from cursor_telegram.files import attachment_from_message, blocked_file, changed_media, file_page, inbound_prompt, inside_workspace, list_sendable, media_index, media_kind, output_paths, safe_filename
-from cursor_telegram.render import escape_html
-from cursor_telegram.runner import Runner, stop_process
-from cursor_telegram.state import State
+from app.access import ConfigError, contact_phone, cursor_model, default_workspace, is_cloud_handoff, mask_phone, parse_command, redact, resolve_workspace, split_text
+from app.board import LiveBoard
+from app.chatlog import message_ids_for_clear
+from app.client import Telegram
+from app.constants import ALLOWED_UPDATES, FILE_PAGE, HELP, MAX_DOWNLOAD, MAX_QUEUE, MAX_UPLOAD, REACTION_CANCELLED, REACTION_DONE, REACTION_ERROR, REACTION_QUEUED, REACTION_WORKING, REMOVE_KEYBOARD, RUN_TIMEOUT_SEC, SHARE, log
+from app.events import consume_event
+from app.files import attachment_from_message, blocked_file, changed_media, file_page, inbound_prompt, inside_workspace, list_sendable, media_index, media_kind, output_paths, safe_filename
+from app.render import escape_html
+from app.runner import Runner, stop_process
+from app.state import State
 
 
 class Prompt:

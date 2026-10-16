@@ -1,6 +1,6 @@
 """Cursor Telegram bridge."""
 
-from cursor_telegram.access import (
+from app.access import (
     ConfigError,
     contact_phone,
     cursor_model,
@@ -15,12 +15,12 @@ from cursor_telegram.access import (
     resolve_workspace,
     split_text,
 )
-from cursor_telegram.activity import format_activity, format_snippet, tool_entry, tool_label, tool_phrase
-from cursor_telegram.board import LiveBoard
-from cursor_telegram.bridge import Bridge, Prompt
-from cursor_telegram.chatlog import forget_messages, message_ids_for_clear
-from cursor_telegram.cli import main
-from cursor_telegram.constants import (
+from app.activity import format_activity, format_snippet, tool_entry, tool_label, tool_phrase
+from app.board import LiveBoard
+from app.bridge import Bridge, Prompt
+from app.chatlog import forget_messages, message_ids_for_clear
+from app.cli import main
+from app.constants import (
     MAX_QUEUE,
     REACTION_CANCELLED,
     REACTION_DONE,
@@ -29,8 +29,8 @@ from cursor_telegram.constants import (
     REACTION_WORKING,
     RICH_LIMIT,
 )
-from cursor_telegram.events import consume_event
-from cursor_telegram.files import (
+from app.events import consume_event
+from app.files import (
     attachment_from_message,
     changed_media,
     file_page,
@@ -40,9 +40,9 @@ from cursor_telegram.files import (
     output_paths,
     safe_filename,
 )
-from cursor_telegram.render import build_run_html, build_run_rich_markdown, format_bubble, message_header
-from cursor_telegram.state import State
-from cursor_telegram.transcript import Transcript, split_live
+from app.render import build_run_html, build_run_rich_markdown, format_bubble, message_header
+from app.state import State
+from app.transcript import Transcript, split_live
 
 __all__ = [
     "Bridge",

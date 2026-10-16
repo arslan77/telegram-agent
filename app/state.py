@@ -7,7 +7,7 @@ import json
 import os
 import threading
 
-from cursor_telegram.constants import STATE_VERSION, log
+from app.constants import STATE_VERSION, log
 
 
 class State:

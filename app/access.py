@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import os
 
-from cursor_telegram.constants import TELEGRAM_LIMIT, log
+from app.constants import TELEGRAM_LIMIT, log
 
 
 class ConfigError(Exception):

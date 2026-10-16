@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 
-from cursor_telegram.activity import format_activity
-from cursor_telegram.board import LiveBoard
+from app.activity import format_activity
+from app.board import LiveBoard
 
 
 def assistant_text(event: dict, *, raw: bool = False) -> str:

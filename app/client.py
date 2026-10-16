@@ -10,9 +10,9 @@ import time
 import urllib.error
 import urllib.request
 
-from cursor_telegram.access import ConfigError, redact, split_text
-from cursor_telegram.constants import MAX_DOWNLOAD, log
-from cursor_telegram.files import safe_filename
+from app.access import ConfigError, redact, split_text
+from app.constants import MAX_DOWNLOAD, log
+from app.files import safe_filename
 
 
 class Telegram:

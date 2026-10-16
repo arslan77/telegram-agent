@@ -7,8 +7,8 @@ import base64
 import os
 import secrets
 
-from cursor_telegram.activity import _success_result, _tool_parts
-from cursor_telegram.constants import FILE_PAGE, MAX_UPLOAD, MEDIA_EXT, SKIP_DIRS
+from app.activity import _success_result, _tool_parts
+from app.constants import FILE_PAGE, MAX_UPLOAD, MEDIA_EXT, SKIP_DIRS
 
 
 def safe_filename(name: str) -> str:

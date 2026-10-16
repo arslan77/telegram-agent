@@ -5,7 +5,7 @@ from __future__ import annotations
 import html
 import re
 
-from cursor_telegram.constants import RICH_LIMIT
+from app.constants import RICH_LIMIT
 
 
 _LIVE_BODY = 2200
