@@ -494,27 +494,21 @@ def rich_tool_details(tools: list[str] | None) -> str:
     return "<details><summary>What Cursor did</summary>\n\n" + "\n\n".join(lines) + "\n\n</details>"
 
 
-def rich_cell(text: str) -> str:
-    return escape_rich_text(text).replace("|", "\\|").replace("\n", " ")
-
-
-def rich_status_table(model: str, project: str, session: str, elapsed: int | None, *, running: bool) -> str:
+def rich_status_heading(model: str, project: str, session: str, elapsed: int | None, *, running: bool) -> str:
     name = (model or "auto").strip() or "auto"
+    bits: list[str] = []
+    if session:
+        bits.append(f"[{escape_rich_text(session)}]")
+    if project:
+        bits.append(escape_rich_text(project))
+    title = " ".join(bits)
     clock = ""
     if elapsed is not None:
         icon = "⏳" if running else "⌛"
-        clock = f"{icon} {max(0, elapsed)}s"
-    row = " | ".join(
-        rich_cell(part)
-        for part in (session or "new", project or "workspace", name, clock or "—")
-    )
-    return "\n".join(
-        [
-            "| Session | Folder | Model | Time |",
-            "|:---|:---|:---|---:|",
-            f"| {row} |",
-        ]
-    )
+        clock = f" · {icon} {max(0, elapsed)}s"
+    if title:
+        return f"> **{title}** · `{name.replace('`', "'")}`{clock}"
+    return f"> **{escape_rich_text(name)}**{clock}"
 
 
 def rich_action_buttons() -> str:
@@ -551,7 +545,7 @@ def build_run_rich_markdown(
     if continued:
         parts = ["> Continued"]
     else:
-        parts = [rich_status_table(model, project, session, elapsed, running=running)]
+        parts = [rich_status_heading(model, project, session, elapsed, running=running)]
     preview = body.strip()
     if running:
         if preview:

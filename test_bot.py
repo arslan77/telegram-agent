@@ -482,8 +482,8 @@ class RichMessageTests(unittest.TestCase):
             snippet="",
             phase="done",
         )
-        self.assertIn("| Session | Folder | Model | Time |", shown)
-        self.assertIn("| abcd1234 | lab\\_notes | grok\\_4 | ⌛ 4s |", shown)
+        self.assertIn("> **[abcd1234] lab\\_notes** · `grok_4` · ⌛ 4s", shown)
+        self.assertNotIn("| Session |", shown)
         self.assertIn('style="danger" data="end"', shown)
         self.assertIn("# Plan", shown)
         self.assertIn("- [x] two", shown)
@@ -623,7 +623,8 @@ class RichMessageTests(unittest.TestCase):
         self.assertIn("# Answer", api.markdown)
         self.assertIn("- done", api.markdown)
         self.assertNotIn("tg-thinking", api.markdown)
-        self.assertIn("| Session | Folder | Model | Time |", api.markdown)
+        self.assertIn("> **", api.markdown)
+        self.assertNotIn("| Session |", api.markdown)
         self.assertIn('style="primary" data="diff"', api.markdown)
         self.assertIn('style="danger" data="end"', api.markdown)
         self.assertIsNone(api.markup)
