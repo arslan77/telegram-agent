@@ -121,9 +121,12 @@ class Telegram:
                         if written > limit:
                             raise RuntimeError("File is larger than 20 MB")
                         handle.write(chunk)
-        except Exception:
+        except RuntimeError:
             dest.unlink(missing_ok=True)
             raise
+        except Exception as exc:
+            dest.unlink(missing_ok=True)
+            raise RuntimeError(f"telegram download unreachable: {exc}") from None
         if written == 0:
             dest.unlink(missing_ok=True)
             raise RuntimeError("Telegram returned an empty file")

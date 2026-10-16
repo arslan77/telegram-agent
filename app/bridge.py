@@ -95,6 +95,7 @@ class Bridge:
         self._restore_jobs()
         self.active_draft_id: int | None = None
         self.drop_session = False
+        self.update_attempts: dict[int, int] = {}
         self.default_workspace = default_workspace(home)
 
     def queued(self) -> int:
@@ -225,7 +226,9 @@ class Bridge:
                 time.sleep(5)
                 continue
             for update in updates.get("result") or []:
-                self.accept(update)
+                if not self.accept(update):
+                    time.sleep(2)
+                    break
 
     def drain(self) -> None:
         skipped = 0
@@ -315,10 +318,34 @@ class Bridge:
         if message_id is not None:
             self.remember(user_id, message_id)
 
-    def accept(self, update: dict) -> None:
+    def accept(self, update: dict) -> bool:
+        """Handle one update. False means Telegram should deliver it again."""
         update_id = int(update.get("update_id", 0))
-        self.state.data["offset"] = update_id + 1
-        self.state.save()
+        try:
+            self._handle(update)
+        except ConfigError:
+            raise
+        except Exception:
+            attempts = self.update_attempts.get(update_id, 0) + 1
+            self.update_attempts[update_id] = attempts
+            log.exception("update %s failed", update_id)
+            if attempts < 3:
+                return False
+            log.error("dropping update %s after %d failures", update_id, attempts)
+        self.update_attempts.pop(update_id, None)
+        self._ack(update_id)
+        return True
+
+    def _ack(self, update_id: int) -> None:
+        with self.state.lock:
+            current = self.state.data.get("offset", 0)
+            nxt = update_id + 1
+            if isinstance(current, int) and nxt <= current:
+                return
+            self.state.data["offset"] = nxt
+            self.state.save()
+
+    def _handle(self, update: dict) -> None:
         stopped = update.get("stopped_message_generation")
         if isinstance(stopped, dict):
             self.on_generation_stopped(stopped)
@@ -340,7 +367,7 @@ class Bridge:
         chat_id = chat.get("id")
         if not isinstance(user_id, int) or not isinstance(chat_id, int):
             return
-        log.info("update %s user %s", update_id, user_id)
+        log.info("update %s user %s", update.get("update_id"), user_id)
         incoming = message.get("message_id")
         if isinstance(incoming, int):
             self.remember(user_id, incoming)
@@ -506,7 +533,9 @@ class Bridge:
     def submit(self, chat_id: int, user_id: int, text: str, message_id: int | None) -> None:
         prompt = Prompt(chat_id, user_id, text, message_id)
         with self.queue_lock:
-            if self.runner.busy() or self.current is not None:
+            if self._holding(message_id):
+                return
+            if self.runner.busy() or self.current is not None or self.pending:
                 if len(self.pending) >= MAX_QUEUE:
                     full = True
                     queued = False
@@ -525,6 +554,13 @@ class Bridge:
             self.telegram.react(chat_id, message_id, REACTION_QUEUED)
             return
         self._launch(prompt)
+
+    def _holding(self, message_id: int | None) -> bool:
+        if not isinstance(message_id, int):
+            return False
+        if self.current is not None and self.current.message_id == message_id:
+            return True
+        return any(item.message_id == message_id for item in self.pending)
 
     def pump(self) -> None:
         if self.runner.busy() or self.current is not None:

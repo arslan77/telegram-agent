@@ -174,3 +174,61 @@ class QueueTests(unittest.TestCase):
             bridge.submit(1, 2, "now", 10)
             bridge.runner.thread.join(3)
             self.assertEqual(bridge.state.data.get("jobs"), [])
+
+
+class DeliveryTests(unittest.TestCase):
+    def message(self, update_id: int, message_id: int, text: str) -> dict:
+        return {
+            "update_id": update_id,
+            "message": {
+                "message_id": message_id,
+                "text": text,
+                "chat": {"id": 1, "type": "private"},
+                "from": {"id": 2, "is_bot": False},
+            },
+        }
+
+    def test_a_handled_update_is_acknowledged(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bridge, _telegram = make_bridge(Path(tmp), {"+971500000000"})
+            bridge.state.data["verified"] = {"2": "+971500000000"}
+
+            def execute(chat_id, user_id, text, message_id=None):
+                return "done"
+
+            bridge.execute = execute
+            self.assertTrue(bridge.accept(self.message(5, 10, "hello")))
+            self.assertEqual(bridge.state.data["offset"], 6)
+            bridge.runner.thread.join(3)
+
+    def test_a_failed_update_stays_unacknowledged_until_it_keeps_failing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bridge, _telegram = make_bridge(Path(tmp))
+
+            def explode(update):
+                raise RuntimeError("connection reset")
+
+            bridge._handle = explode
+            self.assertFalse(bridge.accept(self.message(5, 10, "hello")))
+            self.assertFalse(bridge.accept(self.message(5, 10, "hello")))
+            self.assertEqual(bridge.state.data["offset"], 0)
+            self.assertTrue(bridge.accept(self.message(5, 10, "hello")))
+            self.assertEqual(bridge.state.data["offset"], 6)
+
+    def test_a_new_message_waits_behind_messages_already_saved(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bridge, telegram = make_bridge(Path(tmp))
+            bridge.pending.append(Prompt(1, 2, "voice", 10))
+            bridge.submit(1, 2, "?", 11)
+            self.assertEqual([item.text for item in bridge.pending], ["voice", "?"])
+            self.assertIsNone(bridge.current)
+            self.assertIn((11, REACTION_QUEUED), telegram.reactions)
+            self.assertNotIn((11, REACTION_WORKING), telegram.reactions)
+
+    def test_a_redelivered_message_is_not_queued_twice(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bridge, telegram = make_bridge(Path(tmp))
+            bridge.pending.append(Prompt(1, 2, "voice", 10))
+            bridge.submit(1, 2, "voice", 10)
+            self.assertEqual(len(bridge.pending), 1)
+            self.assertEqual(telegram.reactions, [])
