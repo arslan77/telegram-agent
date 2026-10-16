@@ -481,7 +481,9 @@ class RichMessageTests(unittest.TestCase):
             snippet="",
             phase="done",
         )
-        self.assertIn("> **[abcd1234] lab\\_notes** · `grok_4` · ⌛ 4s", shown)
+        self.assertIn("| Session | Folder | Model | Time |", shown)
+        self.assertIn("| abcd1234 | lab\\_notes | grok\\_4 | ⌛ 4s |", shown)
+        self.assertIn('style="danger" data="end"', shown)
         self.assertIn("# Plan", shown)
         self.assertIn("- [x] two", shown)
         self.assertIn("```python\nprint(1)\n```", shown)
@@ -544,7 +546,7 @@ class RichMessageTests(unittest.TestCase):
             phase="done",
             tools=["✅ read bot.py\n\n```\nprint(1)\n```"],
         )
-        self.assertIn("<details><summary>1 step</summary>", saved)
+        self.assertIn("<details><summary>What Cursor did</summary>", saved)
         self.assertIn("- ✅ read bot.py", saved)
         self.assertNotIn("tg-thinking", saved)
 
@@ -621,8 +623,10 @@ class RichMessageTests(unittest.TestCase):
         self.assertIn("# Answer", api.markdown)
         self.assertIn("- done", api.markdown)
         self.assertNotIn("tg-thinking", api.markdown)
-        self.assertEqual(api.markup["inline_keyboard"][0][0]["style"], "primary")
-        self.assertEqual(api.markup["inline_keyboard"][0][2]["style"], "danger")
+        self.assertIn("| Session | Folder | Model | Time |", api.markdown)
+        self.assertIn('style="primary" data="diff"', api.markdown)
+        self.assertIn('style="danger" data="end"', api.markdown)
+        self.assertIsNone(api.markup)
 
     def test_stop_button_cancels_the_matching_draft(self):
         telegram = FakeTelegram()

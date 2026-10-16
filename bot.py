@@ -491,8 +491,42 @@ def rich_tool_details(tools: list[str] | None) -> str:
         extra = rest.strip()
         if extra:
             lines.append(close_rich_fence(extra))
-    label = "1 step" if len(shown) == 1 else f"{len(shown)} steps"
-    return "<details><summary>" + escape_html(label) + "</summary>\n\n" + "\n\n".join(lines) + "\n\n</details>"
+    return "<details><summary>What Cursor did</summary>\n\n" + "\n\n".join(lines) + "\n\n</details>"
+
+
+def rich_cell(text: str) -> str:
+    return escape_rich_text(text).replace("|", "\\|").replace("\n", " ")
+
+
+def rich_status_table(model: str, project: str, session: str, elapsed: int | None, *, running: bool) -> str:
+    name = (model or "auto").strip() or "auto"
+    clock = ""
+    if elapsed is not None:
+        icon = "⏳" if running else "⌛"
+        clock = f"{icon} {max(0, elapsed)}s"
+    row = " | ".join(
+        rich_cell(part)
+        for part in (session or "new", project or "workspace", name, clock or "—")
+    )
+    return "\n".join(
+        [
+            "| Session | Folder | Model | Time |",
+            "|:---|:---|:---|---:|",
+            f"| {row} |",
+        ]
+    )
+
+
+def rich_action_buttons() -> str:
+    return "\n".join(
+        [
+            '<tg-button-row align="left">',
+            '<tg-button type="callback_data" style="primary" data="diff">Diff</tg-button>',
+            '<tg-button type="callback_data" data="status">Status</tg-button>',
+            '<tg-button type="callback_data" style="danger" data="end">End</tg-button>',
+            "</tg-button-row>",
+        ]
+    )
 
 
 def build_run_rich_markdown(
@@ -510,22 +544,7 @@ def build_run_rich_markdown(
 ) -> str:
     """One rich-markdown document for the live run or the finished answer."""
     running = phase == "running"
-    name = (model or "auto").strip() or "auto"
-    bits: list[str] = []
-    if session:
-        bits.append(f"[{escape_rich_text(session)}]")
-    if project:
-        bits.append(escape_rich_text(project))
-    title = " ".join(bits)
-    clock = ""
-    if elapsed is not None:
-        icon = "⏳" if running else "⌛"
-        clock = f" · {icon} {max(0, elapsed)}s"
-    if title:
-        header = f"> **{title}** · `{name.replace('`', "'")}`{clock}"
-    else:
-        header = f"> **{escape_rich_text(name)}**{clock}"
-    parts = [header]
+    parts = [rich_status_table(model, project, session, elapsed, running=running)]
     preview = body.strip()
     if running:
         if preview:
@@ -549,6 +568,8 @@ def build_run_rich_markdown(
     details = rich_tool_details(tools)
     if details:
         parts.append(details)
+    if not running:
+        parts.append(rich_action_buttons())
     text = "\n\n".join(parts)
     if len(text) <= RICH_LIMIT:
         return text
@@ -1522,8 +1543,8 @@ class LiveBoard:
 
     def _present_rich(self, fields: dict) -> bool:
         markdown = build_run_rich_markdown(**fields)
-        markup = None if self.phase == "running" else RUN_KEYBOARD
-        marker = "rich\n" + markdown + ("|buttons" if markup else "")
+        markup = None
+        marker = "rich\n" + markdown
         if marker == self.visible and self.message_id is not None:
             return True
         if self.message_id is None:
