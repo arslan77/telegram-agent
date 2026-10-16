@@ -229,12 +229,7 @@ class LiveBoard:
                     reply_to=self.reply_to if reply else None,
                 )
             except RuntimeError as exc:
-                detail = str(exc)
-                log.info("rich send failed, using html: %s", detail)
-                if rich_unavailable(detail):
-                    self.rich_dead = True
-                self.use_rich = False
-                return False
+                return self._rich_failure(exc)
             if message_id is None:
                 self.use_rich = False
                 return False
@@ -249,10 +244,18 @@ class LiveBoard:
             if "message is not modified" in detail:
                 self.visible = marker
                 return True
-            log.info("rich edit failed, using html: %s", detail)
+            return self._rich_failure(exc)
+        self.visible = marker
+        return True
+
+    def _rich_failure(self, exc: RuntimeError) -> bool:
+        detail = str(exc)
+        if rich_unavailable(detail):
+            log.info("rich messages are unavailable, using html: %s", detail)
+            self.rich_dead = True
             self.use_rich = False
             return False
-        self.visible = marker
+        log.info("rich update failed, keeping the rich message: %s", detail)
         return True
 
     def _send_piece(

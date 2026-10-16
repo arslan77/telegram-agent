@@ -159,8 +159,11 @@ def largest_rich_prefix(body: str, render, limit: int = RICH_LIMIT) -> int:
 
 
 def rich_unavailable(detail: str) -> bool:
+    """True when Telegram will not accept rich messages at all."""
     lowered = detail.lower()
-    return "sendrichmessage failed: 404" in lowered or "unknown method" in lowered
+    if "unknown method" in lowered or "method not found" in lowered:
+        return True
+    return "sendrichmessage failed: 404" in lowered or "editmessagetext failed: 404" in lowered
 
 
 def build_run_plain(

@@ -10,7 +10,7 @@ class RejectingApi:
 
     def send_rich(self, chat_id, markdown, reply_markup=None, reply_to=None):
         self.calls.append("rich")
-        raise RuntimeError("telegram sendRichMessage failed: 400 can't parse entities")
+        raise RuntimeError("telegram sendRichMessage failed: 404 unknown method")
 
     def send_one(self, chat_id, text, reply_markup=None, html=False, reply_to=None):
         self.calls.append("html")
@@ -23,7 +23,7 @@ class RejectingApi:
 
     def edit_rich(self, *args, **kwargs):
         self.calls.append("edit-rich")
-        raise RuntimeError("telegram editMessageText failed: 400 can't parse entities")
+        raise RuntimeError("telegram editMessageText failed: 404 unknown method")
 
 
 class AcceptingApi:
@@ -85,7 +85,7 @@ class RichFallbackTests(unittest.TestCase):
         board = LiveBoard(api, 1, lambda message_id: None, model="auto", project="lab")
         board.publish(force=True)
         board.finish("Done.\n\n# Kept", "done")
-        self.assertEqual(api.calls[:4], ["rich", "html", "edit-rich", "edit-html"])
+        self.assertEqual(api.calls, ["rich", "html", "edit-html"])
         self.assertFalse(board.use_rich)
 
 
@@ -99,7 +99,44 @@ class RichResumeTests(unittest.TestCase):
         self.assertIn("Continuing after a restart", api.markdown)
 
 
+class DroppingApi:
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+        self.fail_edit = True
+
+    def send_rich(self, chat_id, markdown, reply_markup=None, reply_to=None):
+        self.calls.append("rich")
+        return 21
+
+    def edit_rich(self, chat_id, message_id, markdown, reply_markup=None):
+        self.calls.append("edit-rich")
+        if self.fail_edit:
+            raise RuntimeError("telegram editMessageText unreachable: [Errno 104] Connection reset by peer")
+
+    def send_one(self, *args, **kwargs):
+        self.calls.append("html")
+        raise AssertionError("html fallback")
+
+    def edit(self, *args, **kwargs):
+        self.calls.append("edit-html")
+        raise AssertionError("html edit")
+
+
 class RichEditTests(unittest.TestCase):
+    def test_a_dropped_connection_keeps_the_rich_message(self):
+        api = DroppingApi()
+        board = LiveBoard(api, 1, lambda message_id: None, model="auto", project="lab")
+        board.publish(force=True)
+        board.activity = "Reading a file"
+        board.publish(force=True)
+        self.assertTrue(board.use_rich)
+        self.assertNotIn("html", api.calls)
+        self.assertGreaterEqual(api.calls.count("edit-rich"), 1)
+        api.fail_edit = False
+        board.finish("Done.", "done")
+        self.assertEqual(api.calls[-1], "edit-rich")
+        self.assertNotIn("html", api.calls)
+        self.assertNotIn("edit-html", api.calls)
     def test_an_accepted_run_edits_the_same_rich_message(self):
         api = AcceptingApi()
         board = LiveBoard(api, 1, lambda message_id: None, model="auto", project="lab")
