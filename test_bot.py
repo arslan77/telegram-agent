@@ -4,7 +4,7 @@ import threading
 import unittest
 from pathlib import Path
 
-from bot import (
+from cursor_telegram import (
     Bridge,
     ConfigError,
     MAX_QUEUE,
@@ -184,6 +184,27 @@ class OutputTests(unittest.TestCase):
                 board,
             )
         self.assertEqual(board.transcript.render(), "I can't comply.")
+
+    def test_thinking_deltas_stay_on_the_board(self):
+        board = LiveBoard(None, 1, lambda message_id: None, model="auto", project="lab")
+        board.publish = lambda force=False: None
+        consume_event(
+            json.dumps({"type": "thinking", "subtype": "delta", "text": "Look at ", "session_id": "abcd1234"}),
+            {},
+            board,
+        )
+        consume_event(
+            json.dumps({"type": "thinking", "subtype": "delta", "text": "the heading.", "session_id": "abcd1234"}),
+            {},
+            board,
+        )
+        consume_event(
+            json.dumps({"type": "thinking", "subtype": "completed", "session_id": "abcd1234"}),
+            {},
+            board,
+        )
+        self.assertEqual(board.thinking, "Look at the heading.")
+        self.assertEqual(board.session_label, "abcd1234")
 
     def test_commands_render_as_telegram_code(self):
         shown = format_bubble(
@@ -522,6 +543,53 @@ class RichMessageTests(unittest.TestCase):
         self.assertIn("> *🟡 reading file\\_name.py*", shown)
         self.assertIn("print(1)", shown)
         self.assertNotIn("tg-thinking", shown)
+
+    def test_thinking_sits_under_the_heading_and_folds_once_the_answer_starts(self):
+        open_thought = build_run_rich_markdown(
+            model="grok-4.7-high",
+            project="lab",
+            session="abcd1234",
+            elapsed=2,
+            body="",
+            activity="",
+            snippet="",
+            phase="running",
+            thinking="Check the heading first.",
+        )
+        self.assertIn("> **[abcd1234] lab** · `grok-4.7-high` · ⏳ 2s", open_thought)
+        self.assertLess(
+            open_thought.index("> **Thinking**"),
+            open_thought.index("Check the heading first."),
+        )
+        self.assertNotIn("tg-thinking", open_thought)
+        self.assertNotIn("<details>", open_thought)
+        folded = build_run_rich_markdown(
+            model="grok-4.7-high",
+            project="lab",
+            session="abcd1234",
+            elapsed=3,
+            body="The heading stays.",
+            activity="",
+            snippet="",
+            phase="running",
+            thinking="Check the heading first.",
+        )
+        self.assertIn("<details><summary>Thinking</summary>", folded)
+        self.assertIn("Check the heading first.", folded)
+        self.assertLess(folded.index("<details>"), folded.index("The heading stays."))
+        done = build_run_rich_markdown(
+            model="grok-4.7-high",
+            project="lab",
+            session="abcd1234",
+            elapsed=4,
+            body="The heading stays.",
+            activity="",
+            snippet="",
+            phase="done",
+            thinking="Check the heading first.",
+        )
+        self.assertIn("<details><summary>Thinking</summary>", done)
+        self.assertNotIn("> **Thinking**", done)
 
     def test_draft_uses_the_thinking_block_and_the_saved_answer_collapses_steps(self):
         draft = build_run_rich_markdown(
