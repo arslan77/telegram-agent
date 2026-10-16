@@ -93,7 +93,7 @@ class ContactPhoneTests(unittest.TestCase):
 
 class ParseCommandTests(unittest.TestCase):
     def test_strips_the_bot_name_and_lowercases_the_command(self):
-        self.assertEqual(parse_command("  /Mode@alienware_bot ask  "), ("/mode", "ask"))
+        self.assertEqual(parse_command("  /Mode@my_bot ask  "), ("/mode", "ask"))
 
     def test_plain_text_is_a_prompt(self):
         self.assertEqual(parse_command("fix the tests"), (None, "fix the tests"))
@@ -149,13 +149,23 @@ class WorkspacePathTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             resolve_workspace("notes.txt", self.home)
 
-    def test_default_workspace_uses_alienware_lab_when_it_exists(self):
-        (self.home / "alienware-lab").mkdir()
+    def test_default_workspace_is_home_when_unset(self):
         previous = os.environ.pop("CURSOR_WORKSPACE", None)
         try:
-            self.assertEqual(default_workspace(self.home), (self.home / "alienware-lab").resolve())
+            self.assertEqual(default_workspace(self.home), self.home.resolve())
         finally:
             if previous is not None:
+                os.environ["CURSOR_WORKSPACE"] = previous
+
+    def test_default_workspace_uses_cursor_workspace_when_set(self):
+        previous = os.environ.get("CURSOR_WORKSPACE")
+        os.environ["CURSOR_WORKSPACE"] = str(self.home / "lab")
+        try:
+            self.assertEqual(default_workspace(self.home), (self.home / "lab").resolve())
+        finally:
+            if previous is None:
+                os.environ.pop("CURSOR_WORKSPACE", None)
+            else:
                 os.environ["CURSOR_WORKSPACE"] = previous
 
     def test_cursor_model_falls_back_to_auto(self):

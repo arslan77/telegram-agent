@@ -1,0 +1,10 @@
+[project]
+name = "cursor-telegram"
+version = "0.1.0"
+description = "Telegram bridge to a local Cursor CLI session"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.uv]
+package = false

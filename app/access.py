@@ -124,9 +124,6 @@ def default_workspace(home: Path) -> Path:
             return resolve_workspace(configured, home)
         except ValueError as exc:
             log.warning("CURSOR_WORKSPACE ignored: %s", exc)
-    lab = home / "alienware-lab"
-    if lab.is_dir():
-        return lab.resolve()
     return home.resolve()
 
 def load_config() -> tuple[str, set[str]]:

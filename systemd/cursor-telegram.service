@@ -7,10 +7,10 @@ Type=simple
 Environment=HOME=%h
 Environment=PATH=%h/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 EnvironmentFile=%h/.config/cursor-telegram/env
-WorkingDirectory=%h
+WorkingDirectory=@ROOT@
 UMask=0077
 NoNewPrivileges=true
-ExecStart=/usr/bin/python3 %h/alienware-lab/experiments/cursor-telegram/bot.py
+ExecStart=@UV@ run --project @ROOT@ python @ROOT@/bot.py
 Restart=on-failure
 RestartSec=5
 RestartPreventExitStatus=78

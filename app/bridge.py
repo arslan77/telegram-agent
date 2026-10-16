@@ -531,7 +531,7 @@ class Bridge:
         except (OSError, subprocess.TimeoutExpired) as exc:
             return f"Cursor status unavailable ({exc.__class__.__name__})"
         if completed.returncode != 0:
-            return "Cursor CLI is installed and not signed in. Run scripts/login.sh from the Mac."
+            return "Cursor CLI is installed and not signed in. Run scripts/login.sh and open the URL it prints."
         try:
             payload = json.loads(completed.stdout)
         except json.JSONDecodeError:
@@ -723,7 +723,7 @@ class Bridge:
             return {"text": "", "session_id": "", "cancelled": False, "resume_failed": True}
         if auth_failed:
             board.finish(
-                "Cursor on this machine is not signed in. From the Mac, run experiments/cursor-telegram/scripts/login.sh and open the URL it prints.",
+                "Cursor is not signed in. Run scripts/login.sh and open the URL it prints.",
                 "error",
             )
         elif timed_out:
