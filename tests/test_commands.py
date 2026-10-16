@@ -48,6 +48,22 @@ class CommandDispatchTests(unittest.TestCase):
         self.bridge.on_text(1, 2, "/mode", 3)
         self.assertIn("Mode is agent.", self.telegram.sent[-1])
 
+    def test_model_without_an_argument_reports_the_current_model(self):
+        self.bridge.on_text(1, 2, "/model", 3)
+        self.assertIn("Model is", self.telegram.sent[-1])
+
+    def test_model_is_saved_for_the_same_chat(self):
+        self.bridge.chat(2)["session_id"] = "chat-1"
+        self.bridge.on_text(1, 2, "/model grok-4.7-high", 3)
+        self.assertEqual(self.bridge.chat(2)["model"], "grok-4.7-high")
+        self.assertEqual(self.bridge.chat(2)["session_id"], "chat-1")
+        self.assertIn("The next message uses it.", self.telegram.sent[-1])
+
+    def test_a_model_with_a_space_is_rejected(self):
+        self.bridge.on_text(1, 2, "/model grok 4", 3)
+        self.assertIn("/model name", self.telegram.sent[-1])
+        self.assertNotEqual(self.bridge.chat(2)["model"], "grok 4")
+
     def test_workspace_without_an_argument_reports_the_folder(self):
         self.bridge.on_text(1, 2, "/workspace", 3)
         self.assertIn("Folder is", self.telegram.sent[-1])

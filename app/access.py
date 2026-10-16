@@ -107,6 +107,22 @@ def contact_phone(message: dict) -> str | None:
 def cursor_model() -> str:
     return os.environ.get("CURSOR_MODEL", "").strip() or "auto"
 
+
+def normalize_model(raw: str) -> str:
+    name = raw.strip()
+    if not name or any(ch.isspace() for ch in name) or len(name) > 80:
+        raise ValueError("Use /model name, for example /model grok-4.7-high. /model auto uses the CLI default.")
+    if not all(ch.isalnum() or ch in "._-" for ch in name):
+        raise ValueError("Use /model name, for example /model grok-4.7-high. /model auto uses the CLI default.")
+    return name
+
+
+def model_args(name: str) -> list[str]:
+    chosen = (name or "").strip()
+    if not chosen or chosen == "auto":
+        return []
+    return ["--model", chosen]
+
 def find_agent() -> str:
     override = os.environ.get("CURSOR_AGENT", "").strip()
     if override:

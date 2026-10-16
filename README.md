@@ -81,9 +81,9 @@ Run `scripts/install.sh` once so that env file exists, or export the same variab
 
 `/status` shows the account, folder, and chat. `/new` starts a fresh chat. `/cancel` stops the current run. A message sent while Cursor is busy waits its turn. That queue is saved, so a restart keeps the waiting messages and continues them in the same Telegram message.
 
-`/mode agent` edits files and runs commands. `/mode ask` is read-only. `/mode plan` plans only.
+`/mode agent` edits files and runs commands. `/mode ask` is read-only. `/mode plan` plans only. `/model` shows or sets the Cursor model for the next message. `/model auto` uses the CLI default. `/workspace` shows or sets the folder.
 
-`/workspace` shows or sets the folder. `/clear` deletes chat messages in Telegram and keeps the Cursor session. `/files` lists files in the folder, including photos and audio.
+`/clear` deletes chat messages in Telegram and keeps the Cursor session. `/files` lists files in the folder, including photos and audio.
 
 Changing the allowlist means updating `.env` and running `scripts/install.sh` again.
 

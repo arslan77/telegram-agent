@@ -7,6 +7,8 @@ from app.access import (
     ConfigError,
     contact_phone,
     cursor_model,
+    model_args,
+    normalize_model,
     default_workspace,
     is_cloud_handoff,
     mask_phone,
@@ -167,6 +169,17 @@ class WorkspacePathTests(unittest.TestCase):
                 os.environ.pop("CURSOR_WORKSPACE", None)
             else:
                 os.environ["CURSOR_WORKSPACE"] = previous
+
+    def test_a_model_name_is_kept(self):
+        self.assertEqual(normalize_model(" grok-4.7-high "), "grok-4.7-high")
+
+    def test_a_model_name_with_a_space_is_rejected(self):
+        with self.assertRaises(ValueError):
+            normalize_model("grok 4")
+
+    def test_auto_does_not_pass_a_model_flag(self):
+        self.assertEqual(model_args("auto"), [])
+        self.assertEqual(model_args("grok-4.7-high"), ["--model", "grok-4.7-high"])
 
     def test_cursor_model_falls_back_to_auto(self):
         previous = os.environ.pop("CURSOR_MODEL", None)

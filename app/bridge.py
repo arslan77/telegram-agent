@@ -15,7 +15,7 @@ import subprocess
 import threading
 import time
 
-from app.access import ConfigError, contact_phone, cursor_model, default_workspace, mask_phone, redact, resolve_workspace, split_text
+from app.access import ConfigError, contact_phone, cursor_model, default_workspace, mask_phone, model_args, redact, resolve_workspace, split_text
 from app.board import LiveBoard
 from app.chatlog import message_ids_for_clear
 from app.client import Telegram
@@ -136,6 +136,7 @@ class Bridge:
             chats[key] = row
         row.setdefault("workspace", str(self.default_workspace))
         row.setdefault("mode", "agent")
+        row.setdefault("model", cursor_model())
         row.setdefault("session_id", "")
         if not isinstance(row.get("message_ids"), list):
             row["message_ids"] = []
@@ -192,6 +193,7 @@ class Bridge:
                     {"command": "new", "description": "Start a fresh chat"},
                     {"command": "cancel", "description": "Stop the current run"},
                     {"command": "mode", "description": "agent, ask, or plan"},
+                    {"command": "model", "description": "Show or set the Cursor model"},
                     {"command": "workspace", "description": "Show or set the folder"},
                     {"command": "clear", "description": "Delete chat messages, keep the Cursor session"},
                     {"command": "files", "description": "List or search files, including audio"},
@@ -597,7 +599,7 @@ class Bridge:
                 f"Phone {mask_phone(phone)}",
                 f"Folder {row.get('workspace')}",
                 f"Mode {row.get('mode')}",
-                f"Model {cursor_model()}",
+                f"Model {row.get('model') or cursor_model()}",
                 f"Chat {session}",
                 run_line,
             ]
@@ -647,6 +649,7 @@ class Bridge:
         row = self.chat(user_id)
         workspace = str(row.get("workspace") or self.default_workspace)
         mode = str(row.get("mode") or "agent")
+        model = str(row.get("model") or cursor_model())
         session_id = str(row.get("session_id") or "")
         try:
             resolve_workspace(workspace, self.home)
@@ -668,7 +671,7 @@ class Bridge:
             self.telegram,
             chat_id,
             remember_board,
-            model=cursor_model(),
+            model=model,
             project=Path(workspace).name,
             reply_to=message_id,
             message_id=board_message_id,
@@ -677,7 +680,7 @@ class Bridge:
             board.activity = "Continuing after a restart"
         self.active_draft_id = board.draft_id
         try:
-            return self._execute_board(chat_id, user_id, prompt, workspace, mode, session_id, board)
+            return self._execute_board(chat_id, user_id, prompt, workspace, mode, model, session_id, board)
         finally:
             if self.active_draft_id == board.draft_id:
                 self.active_draft_id = None
@@ -701,6 +704,7 @@ class Bridge:
         prompt: str,
         workspace: str,
         mode: str,
+        model: str,
         session_id: str,
         board: LiveBoard,
     ) -> str:
@@ -714,10 +718,10 @@ class Bridge:
             if self.deliver_file(chat_id, user_id, path):
                 sent.add(key)
 
-        outcome = self.spawn(workspace, mode, session_id, prompt, board, on_output)
+        outcome = self.spawn(workspace, mode, model, session_id, prompt, board, on_output)
         if outcome.get("resume_failed") and session_id:
             board.note("Starting a fresh chat")
-            outcome = self.spawn(workspace, mode, "", prompt, board, on_output)
+            outcome = self.spawn(workspace, mode, model, "", prompt, board, on_output)
         new_session = outcome.get("session_id") or ""
         if self.drop_session:
             self.drop_session = False
@@ -733,6 +737,7 @@ class Bridge:
         self,
         workspace: str,
         mode: str,
+        model: str,
         session_id: str,
         prompt: str,
         board: LiveBoard,
@@ -754,9 +759,7 @@ class Bridge:
         ]
         if mode in {"ask", "plan"}:
             cmd.extend(["--mode", mode])
-        model = os.environ.get("CURSOR_MODEL", "").strip()
-        if model:
-            cmd.extend(["--model", model])
+        cmd.extend(model_args(model))
         if session_id:
             cmd.extend(["--resume", session_id])
         cmd.append(prompt)

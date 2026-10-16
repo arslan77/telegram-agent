@@ -47,6 +47,7 @@ HELP = "\n".join(
         "/mode agent — edit files and run commands",
         "/mode ask — read only",
         "/mode plan — plan only",
+        "/model — show or set the Cursor model for the next message",
         "/workspace — show or set the folder (inside your home directory)",
         "/clear — delete chat messages here. The Cursor session stays",
         "/files — newest files in the folder. Tap one to get it",

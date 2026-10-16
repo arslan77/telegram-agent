@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from app.access import is_cloud_handoff, parse_command, resolve_workspace
+from app.access import is_cloud_handoff, normalize_model, parse_command, resolve_workspace
 from app.constants import HELP
 
 CommandHandler = Callable[..., None]
@@ -126,6 +126,22 @@ def mode_command(bridge, chat_id: int, user_id: int, rest: str, message_id: int 
     row["mode"] = mode
     bridge.state.save()
     bridge.say(user_id, chat_id, f"Mode is {mode}.")
+
+
+@command("/model")
+def model_command(bridge, chat_id: int, user_id: int, rest: str, message_id: int | None) -> None:
+    row = bridge.chat(user_id)
+    if not rest:
+        bridge.say(user_id, chat_id, f"Model is {row['model']}.")
+        return
+    try:
+        name = normalize_model(rest)
+    except ValueError as exc:
+        bridge.say(user_id, chat_id, str(exc))
+        return
+    row["model"] = name
+    bridge.state.save()
+    bridge.say(user_id, chat_id, f"Model is {name}. The next message uses it.")
 
 
 @command("/workspace")
