@@ -1,4 +1,7 @@
-"""Queue, commands, and the loop that turns Telegram into Cursor runs."""
+"""Telegram update loop, the queue, and the Cursor run.
+
+Commands and buttons are registered in app.commands.
+"""
 
 from __future__ import annotations
 
@@ -12,14 +15,15 @@ import subprocess
 import threading
 import time
 
-from app.access import ConfigError, contact_phone, cursor_model, default_workspace, is_cloud_handoff, mask_phone, parse_command, redact, resolve_workspace, split_text
+from app.access import ConfigError, contact_phone, cursor_model, default_workspace, mask_phone, redact, resolve_workspace, split_text
 from app.board import LiveBoard
 from app.chatlog import message_ids_for_clear
 from app.client import Telegram
 from app.constants import ALLOWED_UPDATES, FILE_PAGE, HELP, MAX_DOWNLOAD, MAX_QUEUE, MAX_UPLOAD, REACTION_CANCELLED, REACTION_DONE, REACTION_ERROR, REACTION_QUEUED, REACTION_WORKING, REMOVE_KEYBOARD, RUN_TIMEOUT_SEC, SHARE, log
 from app.events import consume_event
 from app.files import attachment_from_message, blocked_file, changed_media, file_page, inbound_prompt, inside_workspace, list_sendable, media_index, media_kind, output_paths, safe_filename
-from app.render import escape_html
+from app.commands import dispatch_callback, dispatch_text
+from app.html_text import escape_html
 from app.runner import Runner, stop_process
 from app.state import State
 
@@ -187,23 +191,7 @@ class Bridge:
             return
         if self.verified_phone(user_id) is None:
             return
-        if data == "status":
-            self.say(user_id, chat_id, self.status_text(user_id))
-        elif data == "end":
-            if self.runner.busy():
-                self.drop_session = True
-            self.chat(user_id)["session_id"] = ""
-            self.state.save()
-            self.say(user_id, chat_id, "Next message starts a fresh chat.")
-        elif data == "diff":
-            self.send_diff(user_id, chat_id)
-        elif data.startswith("f:"):
-            self.send_saved_file(user_id, chat_id, data[2:])
-        elif data.startswith("fp:"):
-            page_text = data[3:]
-            page = int(page_text) if page_text.isdigit() else 0
-            row = self.chat(user_id)
-            self.show_files(chat_id, user_id, str(row.get("file_query") or ""), page)
+        dispatch_callback(self, user_id, chat_id, data)
 
     def send_diff(self, user_id: int, chat_id: int) -> None:
         raw = str(self.chat(user_id).get("workspace") or "")
@@ -436,52 +424,7 @@ class Bridge:
         return message_id is not None
 
     def on_text(self, chat_id: int, user_id: int, text: str, message_id: int | None = None) -> None:
-        command, rest = parse_command(text)
-        if command in {"/start", "/help"}:
-            self.say(user_id, chat_id, HELP)
-            return
-        if command == "/clear":
-            self.clear_chat(chat_id, user_id, message_id)
-            return
-        if command == "/cancel":
-            if self.runner.busy():
-                self.runner.stop()
-                waiting = self.queued()
-                if waiting == 1:
-                    note = "Stopping the current run. 1 message is still queued."
-                elif waiting:
-                    note = f"Stopping the current run. {waiting} messages are still queued."
-                else:
-                    note = "Stopping the current run."
-                self.say(user_id, chat_id, note)
-            else:
-                self.say(user_id, chat_id, "Nothing is running.")
-            return
-        if command == "/status":
-            self.say(user_id, chat_id, self.status_text(user_id))
-            return
-        if command == "/new":
-            if self.runner.busy():
-                self.drop_session = True
-            self.chat(user_id)["session_id"] = ""
-            self.state.save()
-            self.say(user_id, chat_id, "Next message starts a fresh chat.")
-            return
-        if command == "/mode":
-            self.set_mode(chat_id, user_id, rest)
-            return
-        if command == "/workspace":
-            self.set_workspace(chat_id, user_id, rest)
-            return
-        if command == "/files":
-            query = rest[5:].strip() if rest.lower().startswith("find ") else rest.strip()
-            self.show_files(chat_id, user_id, query, 0)
-            return
-        if command is not None:
-            self.say(user_id, chat_id, "Unknown command.\n\n" + HELP)
-            return
-        if is_cloud_handoff(text):
-            self.say(user_id, chat_id, "Cloud handoff is off. This bot only runs Cursor on this machine.")
+        if dispatch_text(self, chat_id, user_id, text, message_id):
             return
         self.submit(chat_id, user_id, text, message_id)
 
@@ -550,36 +493,6 @@ class Bridge:
                 prompt = self.pending.popleft() if self.pending else None
             if prompt is not None:
                 self.runner.reset_cancel()
-
-    def set_mode(self, chat_id: int, user_id: int, rest: str) -> None:
-        row = self.chat(user_id)
-        if not rest:
-            self.say(user_id, chat_id, f"Mode is {row['mode']}.")
-            return
-        mode = rest.split()[0].lower()
-        if mode not in {"agent", "ask", "plan"}:
-            self.say(user_id, chat_id, "Use /mode agent, /mode ask, or /mode plan.")
-            return
-        row["mode"] = mode
-        self.state.save()
-        self.say(user_id, chat_id, f"Mode is {mode}.")
-
-    def set_workspace(self, chat_id: int, user_id: int, rest: str) -> None:
-        row = self.chat(user_id)
-        if not rest:
-            self.say(user_id, chat_id, f"Folder is {row['workspace']}")
-            return
-        try:
-            path = resolve_workspace(rest, self.home)
-        except ValueError as exc:
-            self.say(user_id, chat_id, str(exc))
-            return
-        if self.runner.busy():
-            self.drop_session = True
-        row["workspace"] = str(path)
-        row["session_id"] = ""
-        self.state.save()
-        self.say(user_id, chat_id, f"Folder is {path}. The next message starts a fresh chat there.")
 
     def status_text(self, user_id: int) -> str:
         row = self.chat(user_id)

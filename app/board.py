@@ -8,7 +8,8 @@ import time
 from app.activity import format_activity, format_snippet
 from app.client import Telegram
 from app.constants import RICH_LIMIT, RUN_KEYBOARD, TELEGRAM_LIMIT, log
-from app.render import build_run_html, build_run_plain, build_run_rich_markdown, html_rejected, largest_rich_prefix, rich_unavailable
+from app.html_text import build_run_html, html_rejected
+from app.rich import build_run_plain, build_run_rich_markdown, largest_rich_prefix, rich_unavailable
 from app.transcript import Transcript, chunk_html
 
 

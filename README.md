@@ -6,7 +6,11 @@ Telegram is the remote control because the bot only makes outbound calls to `api
 
 The default folder is `~/alienware-lab`. `/workspace` can move it anywhere inside your home directory.
 
-`bot.py` is the process the user service starts. The bridge is the `app` package: `access` (who can talk, and which folder), `activity` (tool lines), `render` (HTML and rich messages), `events` (the agent stream, including thinking), `board` (the message that stays on screen), `client` (Telegram), `files` (photos and other files), and `bridge` (the queue and commands).
+`bot.py` is the process the user service starts. The bridge is the `app` package. A new Telegram command or button goes in `commands`. Message text is split between `html_text` and `rich`. The agent stream is `events`, the on-screen message is `board`, and the queue plus the update loop stay in `bridge`.
+
+```bash
+python3 -m unittest discover -s tests -t .
+```
 
 ## Who can use it
 
