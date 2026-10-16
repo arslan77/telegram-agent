@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="340" viewBox="0 0 880 340" role="img" aria-labelledby="title desc">
+  <title id="title">How a Telegram message reaches the Cursor CLI</title>
+  <desc id="desc">A private Telegram message is checked against the phone allowlist, queued by the bot, and run by the Cursor CLI in a folder on the same computer. The bot only makes outbound calls to Telegram.</desc>
+  <rect width="880" height="340" rx="18" fill="#f4f6f2"/>
+  <text x="36" y="42" fill="#1c2416" font-family="Georgia, serif" font-size="22">One message, on one computer</text>
+  <text x="36" y="68" fill="#4d5846" font-family="ui-sans-serif, sans-serif" font-size="14">The bot never opens a port. It only calls out to Telegram.</text>
+
+  <rect x="36" y="98" width="210" height="150" rx="14" fill="#ffffff" stroke="#c9d3c2"/>
+  <text x="56" y="132" fill="#1c2416" font-family="ui-sans-serif, sans-serif" font-size="16" font-weight="700">Telegram</text>
+  <text x="56" y="160" fill="#4d5846" font-family="ui-sans-serif, sans-serif" font-size="13">Private chat</text>
+  <text x="56" y="182" fill="#4d5846" font-family="ui-sans-serif, sans-serif" font-size="13">Your phone number</text>
+  <text x="56" y="204" fill="#4d5846" font-family="ui-sans-serif, sans-serif" font-size="13">Photos, audio, files</text>
+  <text x="56" y="226" fill="#4d5846" font-family="ui-sans-serif, sans-serif" font-size="13">Rich reply in place</text>
+
+  <rect x="334" y="98" width="210" height="150" rx="14" fill="#ffffff" stroke="#c9d3c2"/>
+  <text x="354" y="132" fill="#1c2416" font-family="ui-sans-serif, sans-serif" font-size="16" font-weight="700">This bot</text>
+  <text x="354" y="160" fill="#4d5846" font-family="ui-sans-serif, sans-serif" font-size="13">Allowlist check</text>
+  <text x="354" y="182" fill="#4d5846" font-family="ui-sans-serif, sans-serif" font-size="13">Saved queue</text>
+  <text x="354" y="204" fill="#4d5846" font-family="ui-sans-serif, sans-serif" font-size="13">Live rich message</text>
+  <text x="354" y="226" fill="#4d5846" font-family="ui-sans-serif, sans-serif" font-size="13">Survives a restart</text>
+
+  <rect x="632" y="98" width="210" height="150" rx="14" fill="#ffffff" stroke="#c9d3c2"/>
+  <text x="652" y="132" fill="#1c2416" font-family="ui-sans-serif, sans-serif" font-size="16" font-weight="700">Cursor CLI</text>
+  <text x="652" y="160" fill="#4d5846" font-family="ui-sans-serif, sans-serif" font-size="13">Your Cursor account</text>
+  <text x="652" y="182" fill="#4d5846" font-family="ui-sans-serif, sans-serif" font-size="13">Files, shell, git</text>
+  <text x="652" y="204" fill="#4d5846" font-family="ui-sans-serif, sans-serif" font-size="13">Ask, plan, or agent</text>
+  <text x="652" y="226" fill="#4d5846" font-family="ui-sans-serif, sans-serif" font-size="13">Same computer</text>
+
+  <path d="M246 173 H318" stroke="#6d7a64" stroke-width="2" fill="none"/>
+  <path d="M310 167 L322 173 L310 179" fill="#6d7a64"/>
+  <path d="M544 173 H616" stroke="#6d7a64" stroke-width="2" fill="none"/>
+  <path d="M608 167 L620 173 L608 179" fill="#6d7a64"/>
+
+  <text x="258" y="164" fill="#6d7a64" font-family="ui-sans-serif, sans-serif" font-size="12">message</text>
+  <text x="552" y="164" fill="#6d7a64" font-family="ui-sans-serif, sans-serif" font-size="12">agent</text>
+
+  <rect x="334" y="270" width="508" height="42" rx="12" fill="#e7eee4" stroke="#c9d3c2"/>
+  <text x="354" y="296" fill="#1c2416" font-family="ui-sans-serif, sans-serif" font-size="14">Folder inside your home directory. /workspace can move it.</text>
+</svg>

@@ -6,6 +6,8 @@ A message that starts with `&` is rejected. The chat cannot be handed to a Curso
 
 The default folder is your home directory. `/workspace` can move it anywhere inside your home directory.
 
+![How a Telegram message reaches the Cursor CLI](docs/architecture.svg)
+
 ## Dependencies
 
 | | |
