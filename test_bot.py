@@ -489,6 +489,21 @@ class RichMessageTests(unittest.TestCase):
         self.assertIn("✅", shown)
         self.assertNotIn("<b>", shown)
 
+    def test_rich_markdown_keeps_answers_longer_than_the_html_cap(self):
+        body = "word " * 1200
+        shown = build_run_rich_markdown(
+            model="auto",
+            project="lab",
+            session="abcd1234",
+            elapsed=2,
+            body=body,
+            activity="",
+            snippet="",
+            phase="done",
+        )
+        self.assertGreater(len(shown), 4096)
+        self.assertIn(body.strip(), shown)
+
     def test_rich_markdown_closes_a_live_fence_and_escapes_the_activity(self):
         shown = build_run_rich_markdown(
             model="auto",

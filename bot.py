@@ -506,7 +506,7 @@ def build_run_rich_markdown(
         header = f"> **{escape_rich_text(name)}**{clock}"
     parts = [header]
     if running:
-        preview = finalize_live(body)
+        preview = body.strip()
         if preview:
             parts.append(close_rich_fence(preview))
         if activity:
