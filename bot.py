@@ -541,10 +541,17 @@ def build_run_rich_markdown(
     phase: str,
     tools: list[str] | None = None,
     draft: bool = False,
+    continued: bool = False,
+    buttons: bool | None = None,
 ) -> str:
     """One rich-markdown document for the live run or the finished answer."""
     running = phase == "running"
-    parts = [rich_status_table(model, project, session, elapsed, running=running)]
+    if buttons is None:
+        buttons = not running
+    if continued:
+        parts = ["> Continued"]
+    else:
+        parts = [rich_status_table(model, project, session, elapsed, running=running)]
     preview = body.strip()
     if running:
         if preview:
@@ -568,13 +575,32 @@ def build_run_rich_markdown(
     details = rich_tool_details(tools)
     if details:
         parts.append(details)
-    if not running:
+    if buttons:
         parts.append(rich_action_buttons())
-    text = "\n\n".join(parts)
-    if len(text) <= RICH_LIMIT:
-        return text
-    clipped = text[: RICH_LIMIT - 2].rstrip() + "\n…"
-    return close_rich_fence(clipped)
+    return "\n\n".join(parts)
+
+
+def largest_rich_prefix(body: str, render, limit: int = RICH_LIMIT) -> int:
+    """Largest prefix of body whose rendered message fits in one rich message."""
+    if not body:
+        return 0
+    if len(render(body)) <= limit:
+        return len(body)
+    lo, hi, best = 0, len(body), 0
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        if mid and len(render(body[:mid])) <= limit:
+            best = mid
+            lo = mid + 1
+        else:
+            hi = mid - 1
+    if best <= 0:
+        return 0
+    for marker in ("\n\n", "\n"):
+        cut = body.rfind(marker, 0, best)
+        if cut > best // 2:
+            return cut
+    return best
 
 
 def rich_unavailable(detail: str) -> bool:
@@ -1406,8 +1432,10 @@ class LiveBoard:
         self.timer_slot = -1
         self.extras_sent = False
         self.use_rich = True
-        self.use_draft = True
+        self.use_draft = False
         self.rich_dead = False
+        self.frozen_ids: list[int] = []
+        self.frozen_chars = 0
         self.draft_id = secrets.randbelow(2_000_000_000) + 1
         self.tool_log: list[str] = []
 
@@ -1498,8 +1526,6 @@ class LiveBoard:
 
     def _present(self) -> None:
         fields = self._view_args()
-        if self.phase == "running" and self.use_draft and self._present_draft(fields):
-            return
         if self.use_rich and self._present_rich(fields):
             return
         formatted = build_run_html(**fields)
@@ -1527,23 +1553,37 @@ class LiveBoard:
         self.message_id = anchor
         self.visible = anchor_visible
 
-    def _present_draft(self, fields: dict) -> bool:
-        markdown = build_run_rich_markdown(**fields, draft=True)
-        marker = "draft\n" + markdown
-        if marker == self.visible:
-            return True
-        try:
-            self.telegram.send_draft(self.chat_id, self.draft_id, markdown)
-        except RuntimeError as exc:
-            log.info("rich draft failed, using a saved message: %s", exc)
-            self.use_draft = False
-            return False
-        self.visible = marker
-        return True
+    def _rich_doc(self, fields: dict, body: str, *, continued: bool, buttons: bool) -> str:
+        data = dict(fields)
+        data["body"] = body
+        return build_run_rich_markdown(**data, continued=continued, buttons=buttons)
 
     def _present_rich(self, fields: dict) -> bool:
-        markdown = build_run_rich_markdown(**fields)
-        markup = None
+        body = str(fields.get("body") or "")
+        buttons = self.phase != "running"
+        while True:
+            continued = self.frozen_chars > 0
+            rest = body[self.frozen_chars :]
+            markdown = self._rich_doc(fields, rest, continued=continued, buttons=buttons)
+            if len(markdown) <= RICH_LIMIT or not rest:
+                return self._upsert_rich(markdown, reply=not self.frozen_ids)
+            fit = largest_rich_prefix(
+                rest,
+                lambda prefix: self._rich_doc(fields, prefix, continued=continued, buttons=False),
+            )
+            if fit <= 0:
+                return self._upsert_rich(markdown[:RICH_LIMIT], reply=not self.frozen_ids)
+            chunk = self._rich_doc(fields, rest[:fit], continued=continued, buttons=False)
+            if not self._upsert_rich(chunk, reply=not self.frozen_ids):
+                return False
+            if self.message_id is None:
+                return False
+            self.frozen_ids.append(self.message_id)
+            self.frozen_chars += fit
+            self.message_id = None
+            self.visible = ""
+
+    def _upsert_rich(self, markdown: str, *, reply: bool) -> bool:
         marker = "rich\n" + markdown
         if marker == self.visible and self.message_id is not None:
             return True
@@ -1552,8 +1592,7 @@ class LiveBoard:
                 message_id = self.telegram.send_rich(
                     self.chat_id,
                     markdown,
-                    reply_markup=markup,
-                    reply_to=self.reply_to,
+                    reply_to=self.reply_to if reply else None,
                 )
             except RuntimeError as exc:
                 detail = str(exc)
@@ -1570,7 +1609,7 @@ class LiveBoard:
             self.on_message(message_id)
             return True
         try:
-            self.telegram.edit_rich(self.chat_id, self.message_id, markdown, reply_markup=markup)
+            self.telegram.edit_rich(self.chat_id, self.message_id, markdown)
         except RuntimeError as exc:
             detail = str(exc)
             if "message is not modified" in detail:

@@ -13,6 +13,7 @@ from bot import (
     REACTION_DONE,
     REACTION_QUEUED,
     REACTION_WORKING,
+    RICH_LIMIT,
     State,
     Transcript,
     attachment_from_message,
@@ -579,13 +580,13 @@ class RichMessageTests(unittest.TestCase):
         api = Api()
         board = LiveBoard(api, 1, lambda message_id: None, model="auto", project="lab")
         board.publish(force=True)
-        self.assertEqual(api.calls, ["draft", "rich", "html"])
+        self.assertEqual(api.calls, ["rich", "html"])
         self.assertTrue(api.html)
         self.assertIn("<blockquote>", api.text)
         self.assertFalse(board.use_rich)
 
         board.finish("Done.\n\n# Kept", "done")
-        self.assertEqual(api.calls[:5], ["draft", "rich", "html", "edit-rich", "edit-html"])
+        self.assertEqual(api.calls[:4], ["rich", "html", "edit-rich", "edit-html"])
         self.assertFalse(board.use_rich)
 
     def test_rich_edits_stick_when_telegram_accepts_them(self):
@@ -618,8 +619,7 @@ class RichMessageTests(unittest.TestCase):
         board = LiveBoard(api, 1, lambda message_id: None, model="auto", project="lab")
         board.publish(force=True)
         board.finish("# Answer\n\n- done", "done")
-        self.assertEqual(api.calls, ["draft", "rich"])
-        self.assertIn("tg-thinking", api.draft)
+        self.assertEqual(api.calls, ["rich", "edit-rich"])
         self.assertIn("# Answer", api.markdown)
         self.assertIn("- done", api.markdown)
         self.assertNotIn("tg-thinking", api.markdown)
@@ -627,6 +627,43 @@ class RichMessageTests(unittest.TestCase):
         self.assertIn('style="primary" data="diff"', api.markdown)
         self.assertIn('style="danger" data="end"', api.markdown)
         self.assertIsNone(api.markup)
+
+    def test_a_long_answer_stays_in_the_first_message_and_continues(self):
+        class Api:
+            def __init__(self) -> None:
+                self.sent: list[str] = []
+                self.edits: list[tuple[int, str]] = []
+                self.next_id = 1
+
+            def send_rich(self, chat_id, markdown, reply_markup=None, reply_to=None):
+                self.sent.append(markdown)
+                message_id = self.next_id
+                self.next_id += 1
+                return message_id
+
+            def edit_rich(self, chat_id, message_id, markdown, reply_markup=None):
+                self.edits.append((message_id, markdown))
+
+            def send_one(self, *args, **kwargs):
+                raise AssertionError("html fallback")
+
+            def edit(self, *args, **kwargs):
+                raise AssertionError("html edit")
+
+        api = Api()
+        board = LiveBoard(api, 1, lambda message_id: None, model="auto", project="lab")
+        board.final_body = "alpha\n\n" + ("word " * 8000)
+        board.phase = "done"
+        board.publish(force=True)
+        self.assertGreaterEqual(len(api.sent), 2)
+        first = api.sent[0]
+        self.assertIn("alpha", first)
+        self.assertLessEqual(len(first), RICH_LIMIT)
+        board.final_body += "\n\nmore"
+        board.publish(force=True)
+        self.assertEqual(api.sent[0], first)
+        self.assertTrue(api.edits)
+        self.assertNotEqual(api.edits[-1][0], 1)
 
     def test_stop_button_cancels_the_matching_draft(self):
         telegram = FakeTelegram()
