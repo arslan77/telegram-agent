@@ -29,11 +29,56 @@ from app.state import State
 
 
 class Prompt:
-    def __init__(self, chat_id: int, user_id: int, text: str, message_id: int | None) -> None:
+    def __init__(
+        self,
+        chat_id: int,
+        user_id: int,
+        text: str,
+        message_id: int | None,
+        job_id: str | None = None,
+        board_message_id: int | None = None,
+        resumed: bool = False,
+    ) -> None:
         self.chat_id = chat_id
         self.user_id = user_id
         self.text = text
         self.message_id = message_id
+        self.job_id = job_id or secrets.token_hex(8)
+        self.board_message_id = board_message_id if isinstance(board_message_id, int) else None
+        self.resumed = resumed
+
+    def to_job(self, status: str) -> dict:
+        return {
+            "id": self.job_id,
+            "chat_id": self.chat_id,
+            "user_id": self.user_id,
+            "text": self.text,
+            "message_id": self.message_id,
+            "board_message_id": self.board_message_id,
+            "status": status,
+        }
+
+    @staticmethod
+    def from_job(row: object) -> "Prompt | None":
+        if not isinstance(row, dict):
+            return None
+        text = row.get("text")
+        chat_id = row.get("chat_id")
+        user_id = row.get("user_id")
+        if not isinstance(text, str) or not text or not isinstance(chat_id, int) or not isinstance(user_id, int):
+            return None
+        message_id = row.get("message_id")
+        board_id = row.get("board_message_id")
+        job_id = row.get("id") if isinstance(row.get("id"), str) and row.get("id") else None
+        return Prompt(
+            chat_id,
+            user_id,
+            text,
+            message_id if isinstance(message_id, int) else None,
+            job_id=job_id,
+            board_message_id=board_id if isinstance(board_id, int) else None,
+            resumed=row.get("status") == "running",
+        )
 
 
 class Bridge:
@@ -45,7 +90,9 @@ class Bridge:
         self.home = home
         self.runner = Runner()
         self.pending: deque[Prompt] = deque()
+        self.current: Prompt | None = None
         self.queue_lock = threading.Lock()
+        self._restore_jobs()
         self.active_draft_id: int | None = None
         self.drop_session = False
         self.default_workspace = default_workspace(home)
@@ -53,6 +100,32 @@ class Bridge:
     def queued(self) -> int:
         with self.queue_lock:
             return len(self.pending)
+
+    def _restore_jobs(self) -> None:
+        raw = self.state.data.get("jobs")
+        if not isinstance(raw, list):
+            return
+        running: list[Prompt] = []
+        waiting: list[Prompt] = []
+        for row in raw:
+            prompt = Prompt.from_job(row)
+            if prompt is None:
+                continue
+            if prompt.resumed:
+                running.append(prompt)
+            else:
+                waiting.append(prompt)
+        self.pending = deque(running + waiting)
+
+    def _snapshot(self) -> None:
+        with self.queue_lock:
+            jobs = []
+            if self.current is not None:
+                jobs.append(self.current.to_job("running"))
+            jobs.extend(prompt.to_job("queued") for prompt in self.pending)
+        with self.state.lock:
+            self.state.data["jobs"] = jobs
+            self.state.save()
 
     def chat(self, user_id: int) -> dict:
         key = str(user_id)
@@ -431,7 +504,7 @@ class Bridge:
     def submit(self, chat_id: int, user_id: int, text: str, message_id: int | None) -> None:
         prompt = Prompt(chat_id, user_id, text, message_id)
         with self.queue_lock:
-            if self.runner.busy():
+            if self.runner.busy() or self.current is not None:
                 if len(self.pending) >= MAX_QUEUE:
                     full = True
                     queued = False
@@ -446,12 +519,13 @@ class Bridge:
             self.say(user_id, chat_id, f"Queue is full ({MAX_QUEUE}). Wait for a run to finish.")
             return
         if queued:
+            self._snapshot()
             self.telegram.react(chat_id, message_id, REACTION_QUEUED)
             return
         self._launch(prompt)
 
     def pump(self) -> None:
-        if self.runner.busy():
+        if self.runner.busy() or self.current is not None:
             return
         with self.queue_lock:
             if not self.pending:
@@ -460,15 +534,25 @@ class Bridge:
         self._launch(prompt)
 
     def _launch(self, prompt: Prompt) -> None:
+        self.current = prompt
+        self._snapshot()
         self.telegram.react(prompt.chat_id, prompt.message_id, REACTION_WORKING)
         if self.runner.start(lambda: self._drain(prompt)):
             return
+        self.current = None
         with self.queue_lock:
             self.pending.appendleft(prompt)
+        self._snapshot()
         self.telegram.react(prompt.chat_id, prompt.message_id, REACTION_QUEUED)
+
+    def _finish_job(self) -> None:
+        self.current = None
+        self._snapshot()
 
     def _drain(self, prompt: Prompt | None) -> None:
         while prompt is not None:
+            self.current = prompt
+            self._snapshot()
             self.telegram.react(prompt.chat_id, prompt.message_id, REACTION_WORKING)
             phase = "error"
             try:
@@ -483,6 +567,7 @@ class Bridge:
                 except Exception:
                     log.exception("could not report the error")
                 phase = "error"
+            self._finish_job()
             emoji = {
                 "done": REACTION_DONE,
                 "cancelled": REACTION_CANCELLED,
@@ -568,14 +653,28 @@ class Bridge:
         except ValueError as exc:
             self.say(user_id, chat_id, str(exc))
             return "error"
+        active = self.current if self.current is not None and self.current.chat_id == chat_id else None
+        board_message_id = active.board_message_id if active is not None else None
+        resumed = bool(active and active.resumed)
+
+        def remember_board(sent_id: int | None, job: Prompt | None = active) -> None:
+            self.remember(user_id, sent_id)
+            if job is None or not isinstance(sent_id, int) or job.board_message_id == sent_id:
+                return
+            job.board_message_id = sent_id
+            self._snapshot()
+
         board = LiveBoard(
             self.telegram,
             chat_id,
-            lambda sent_id: self.remember(user_id, sent_id),
+            remember_board,
             model=cursor_model(),
             project=Path(workspace).name,
             reply_to=message_id,
+            message_id=board_message_id,
         )
+        if resumed:
+            board.activity = "Continuing after a restart"
         self.active_draft_id = board.draft_id
         try:
             return self._execute_board(chat_id, user_id, prompt, workspace, mode, session_id, board)

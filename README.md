@@ -77,7 +77,7 @@ Run `scripts/install.sh` once so that env file exists, or export the same variab
 
 ## Commands
 
-`/status` shows the account, folder, and chat. `/new` starts a fresh chat. `/cancel` stops the current run. A message sent while Cursor is busy waits its turn.
+`/status` shows the account, folder, and chat. `/new` starts a fresh chat. `/cancel` stops the current run. A message sent while Cursor is busy waits its turn. That queue is saved, so a restart keeps the waiting messages and continues them in the same Telegram message.
 
 `/mode agent` edits files and runs commands. `/mode ask` is read-only. `/mode plan` plans only.
 

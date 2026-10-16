@@ -24,6 +24,7 @@ class LiveBoard:
         model: str = "auto",
         project: str = "",
         reply_to: int | None = None,
+        message_id: int | None = None,
     ) -> None:
         self.telegram = telegram
         self.chat_id = chat_id
@@ -40,7 +41,7 @@ class LiveBoard:
         self.thinking_open = False
         self.phase = "running"
         self.final_body: str | None = None
-        self.message_id: int | None = None
+        self.message_id = message_id if isinstance(message_id, int) else None
         self.visible = ""
         self.last_at = 0.0
         self.dirty = False

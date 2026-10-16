@@ -89,6 +89,16 @@ class RichFallbackTests(unittest.TestCase):
         self.assertFalse(board.use_rich)
 
 
+class RichResumeTests(unittest.TestCase):
+    def test_an_existing_message_is_edited_instead_of_sending_another(self):
+        api = AcceptingApi()
+        board = LiveBoard(api, 1, lambda message_id: None, model="auto", project="lab", message_id=21)
+        board.activity = "Continuing after a restart"
+        board.publish(force=True)
+        self.assertEqual(api.calls, ["edit-rich"])
+        self.assertIn("Continuing after a restart", api.markdown)
+
+
 class RichEditTests(unittest.TestCase):
     def test_an_accepted_run_edits_the_same_rich_message(self):
         api = AcceptingApi()

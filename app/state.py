@@ -1,4 +1,4 @@
-"""Persistent chat, allowlist, and offset state."""
+"""Persistent chat, allowlist, offset, and queued jobs."""
 
 from __future__ import annotations
 
