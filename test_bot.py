@@ -518,11 +518,44 @@ class RichMessageTests(unittest.TestCase):
         self.assertTrue(shown.count("```") % 2 == 0)
         self.assertIn("> *🟡 reading file\\_name.py*", shown)
         self.assertIn("print(1)", shown)
+        self.assertNotIn("tg-thinking", shown)
+
+    def test_draft_uses_the_thinking_block_and_the_saved_answer_collapses_steps(self):
+        draft = build_run_rich_markdown(
+            model="auto",
+            project="lab",
+            session="abcd1234",
+            elapsed=1,
+            body="",
+            activity="🟡 reading bot.py",
+            snippet="",
+            phase="running",
+            draft=True,
+        )
+        self.assertIn("<tg-thinking>🟡 reading bot.py</tg-thinking>", draft)
+        saved = build_run_rich_markdown(
+            model="auto",
+            project="lab",
+            session="abcd1234",
+            elapsed=1,
+            body="Done.",
+            activity="",
+            snippet="",
+            phase="done",
+            tools=["✅ read bot.py\n\n```\nprint(1)\n```"],
+        )
+        self.assertIn("<details><summary>1 step</summary>", saved)
+        self.assertIn("- ✅ read bot.py", saved)
+        self.assertNotIn("tg-thinking", saved)
 
     def test_rejected_rich_message_uses_html(self):
         class Api:
             def __init__(self) -> None:
                 self.calls: list[str] = []
+
+            def send_draft(self, chat_id, draft_id, markdown):
+                self.calls.append("draft")
+                raise RuntimeError("telegram sendRichMessageDraft failed: 400 can't parse entities")
 
             def send_rich(self, chat_id, markdown, reply_markup=None, reply_to=None):
                 self.calls.append("rich")
@@ -544,13 +577,13 @@ class RichMessageTests(unittest.TestCase):
         api = Api()
         board = LiveBoard(api, 1, lambda message_id: None, model="auto", project="lab")
         board.publish(force=True)
-        self.assertEqual(api.calls, ["rich", "html"])
+        self.assertEqual(api.calls, ["draft", "rich", "html"])
         self.assertTrue(api.html)
         self.assertIn("<blockquote>", api.text)
         self.assertFalse(board.use_rich)
 
         board.finish("Done.\n\n# Kept", "done")
-        self.assertEqual(api.calls[:4], ["rich", "html", "edit-rich", "edit-html"])
+        self.assertEqual(api.calls[:5], ["draft", "rich", "html", "edit-rich", "edit-html"])
         self.assertFalse(board.use_rich)
 
     def test_rich_edits_stick_when_telegram_accepts_them(self):
@@ -558,9 +591,14 @@ class RichMessageTests(unittest.TestCase):
             def __init__(self) -> None:
                 self.calls: list[str] = []
 
+            def send_draft(self, chat_id, draft_id, markdown):
+                self.calls.append("draft")
+                self.draft = markdown
+
             def send_rich(self, chat_id, markdown, reply_markup=None, reply_to=None):
                 self.calls.append("rich")
                 self.markdown = markdown
+                self.markup = reply_markup
                 return 21
 
             def edit_rich(self, chat_id, message_id, markdown, reply_markup=None):
@@ -578,10 +616,33 @@ class RichMessageTests(unittest.TestCase):
         board = LiveBoard(api, 1, lambda message_id: None, model="auto", project="lab")
         board.publish(force=True)
         board.finish("# Answer\n\n- done", "done")
-        self.assertEqual(api.calls, ["rich", "edit-rich"])
+        self.assertEqual(api.calls, ["draft", "rich"])
+        self.assertIn("tg-thinking", api.draft)
         self.assertIn("# Answer", api.markdown)
         self.assertIn("- done", api.markdown)
-        self.assertIsNotNone(api.markup)
+        self.assertNotIn("tg-thinking", api.markdown)
+        self.assertEqual(api.markup["inline_keyboard"][0][0]["style"], "primary")
+        self.assertEqual(api.markup["inline_keyboard"][0][2]["style"], "danger")
+
+    def test_stop_button_cancels_the_matching_draft(self):
+        telegram = FakeTelegram()
+        with tempfile.TemporaryDirectory() as tmp:
+            bridge = Bridge(telegram, State(Path(tmp) / "state.json"), {"971500000000"}, "/bin/true", Path(tmp))
+            bridge.state.data["verified"] = {"5": "971500000000"}
+            bridge.active_draft_id = 7
+            started = threading.Event()
+
+            def run() -> None:
+                started.set()
+                bridge.runner.cancel.wait(2)
+
+            self.assertTrue(bridge.runner.start(run))
+            self.assertTrue(started.wait(1))
+            bridge.on_generation_stopped({"draft_id": 9, "chat": {"id": 5, "type": "private"}})
+            self.assertFalse(bridge.runner.cancel.is_set())
+            bridge.on_generation_stopped({"draft_id": 7, "chat": {"id": 5, "type": "private"}})
+            self.assertTrue(bridge.runner.cancel.is_set())
+            bridge.runner.thread.join(2)
 
 
 if __name__ == "__main__":

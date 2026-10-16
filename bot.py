@@ -440,6 +440,7 @@ def build_run_html(
     activity: str,
     snippet: str,
     phase: str,
+    tools: list[str] | None = None,
 ) -> str:
     """Live run, or the finished answer that replaces it."""
     running = phase == "running"
@@ -463,6 +464,9 @@ def build_run_html(
             parts.append(markdown_to_telegram_html(body.strip()))
         else:
             parts.append("<i>(no output)</i>")
+    steps = [entry.splitlines()[0].strip() for entry in (tools or []) if entry.strip()][-30:]
+    if steps:
+        parts.append(escape_html("\n".join(f"• {step}" for step in steps)))
     return "\n".join(parts)
 
 
@@ -476,6 +480,21 @@ def close_rich_fence(text: str) -> str:
     return text
 
 
+def rich_tool_details(tools: list[str] | None) -> str:
+    shown = [entry for entry in (tools or []) if entry.strip()][-30:]
+    if not shown:
+        return ""
+    lines: list[str] = []
+    for entry in shown:
+        first, _, rest = entry.partition("\n")
+        lines.append(f"- {first.strip()}")
+        extra = rest.strip()
+        if extra:
+            lines.append(close_rich_fence(extra))
+    label = "1 step" if len(shown) == 1 else f"{len(shown)} steps"
+    return "<details><summary>" + escape_html(label) + "</summary>\n\n" + "\n\n".join(lines) + "\n\n</details>"
+
+
 def build_run_rich_markdown(
     *,
     model: str,
@@ -486,6 +505,8 @@ def build_run_rich_markdown(
     activity: str,
     snippet: str,
     phase: str,
+    tools: list[str] | None = None,
+    draft: bool = False,
 ) -> str:
     """One rich-markdown document for the live run or the finished answer."""
     running = phase == "running"
@@ -505,23 +526,29 @@ def build_run_rich_markdown(
     else:
         header = f"> **{escape_rich_text(name)}**{clock}"
     parts = [header]
+    preview = body.strip()
     if running:
-        preview = body.strip()
         if preview:
             parts.append(close_rich_fence(preview))
-        if activity:
+        if draft and not preview:
+            think = activity.strip() or "working…"
+            parts.append(f"<tg-thinking>{escape_html(think)}</tg-thinking>")
+        elif activity:
             parts.append(f"> *{escape_rich_text(activity)}*")
         if snippet:
             safe_snippet = snippet.replace("```", "'''")
             parts.append(f"```\n{safe_snippet}\n```")
         if len(parts) == 1:
-            parts.append("*working…*")
+            parts.append("<tg-thinking>working…</tg-thinking>" if draft else "*working…*")
     else:
         parts.append({"cancelled": "⛔", "error": "🔴"}.get(phase, "✅"))
-        if body.strip():
-            parts.append(close_rich_fence(body.strip()))
+        if preview:
+            parts.append(close_rich_fence(preview))
         else:
             parts.append("*(no output)*")
+    details = rich_tool_details(tools)
+    if details:
+        parts.append(details)
     text = "\n\n".join(parts)
     if len(text) <= RICH_LIMIT:
         return text
@@ -544,6 +571,7 @@ def build_run_plain(
     activity: str,
     snippet: str,
     phase: str,
+    tools: list[str] | None = None,
 ) -> str:
     title = " ".join(part for part in (f"[{session}]" if session else "", project, model) if part)
     if elapsed is not None:
@@ -557,16 +585,20 @@ def build_run_plain(
         lines.append(activity)
     if phase == "running" and snippet:
         lines.append(snippet)
+    steps = [entry.splitlines()[0].strip() for entry in (tools or []) if entry.strip()][-30:]
+    if steps:
+        lines.append("\n".join(f"• {step}" for step in steps))
     return "\n\n".join(lines)[:4096]
 
 
 RUN_KEYBOARD = {
     "inline_keyboard": [[
-        {"text": "Diff", "callback_data": "diff"},
+        {"text": "Diff", "callback_data": "diff", "style": "primary"},
         {"text": "Status", "callback_data": "status"},
-        {"text": "End", "callback_data": "end"},
+        {"text": "End", "callback_data": "end", "style": "danger"},
     ]]
 }
+ALLOWED_UPDATES = ["message", "callback_query", "stopped_message_generation"]
 
 
 _FILE_TOOL = re.compile(r"^(Reading|Writing|Editing|Deleting|Searching|Finding|Listing) (\S+)$")
@@ -1277,6 +1309,18 @@ class Telegram:
         message_id = result.get("result", {}).get("message_id")
         return message_id if isinstance(message_id, int) else None
 
+    def send_draft(self, chat_id: int, draft_id: int, markdown: str) -> None:
+        self.call(
+            "sendRichMessageDraft",
+            {
+                "chat_id": chat_id,
+                "draft_id": draft_id,
+                "can_stop": True,
+                "rich_message": {"markdown": markdown[:32768]},
+            },
+            timeout=30,
+        )
+
     def edit_rich(
         self,
         chat_id: int,
@@ -1341,7 +1385,10 @@ class LiveBoard:
         self.timer_slot = -1
         self.extras_sent = False
         self.use_rich = True
+        self.use_draft = True
         self.rich_dead = False
+        self.draft_id = secrets.randbelow(2_000_000_000) + 1
+        self.tool_log: list[str] = []
 
     def set_session(self, session_id: str) -> None:
         short = session_id.strip()[:8]
@@ -1364,6 +1411,15 @@ class LiveBoard:
             return
         self.activity = line
         self.snippet = snippet
+        if done:
+            entry = line
+            if snippet:
+                safe_snippet = snippet.replace("```", "'''")
+                entry = f"{line}\n\n```\n{safe_snippet}\n```"
+            if entry and (not self.tool_log or self.tool_log[-1] != entry):
+                self.tool_log.append(entry)
+            if len(self.tool_log) > 30:
+                del self.tool_log[:-30]
         self.publish(force=True)
 
     def stream(self, text: str) -> None:
@@ -1416,10 +1472,13 @@ class LiveBoard:
             "activity": self.activity if self.phase == "running" else "",
             "snippet": self.snippet if self.phase == "running" else "",
             "phase": self.phase,
+            "tools": list(self.tool_log),
         }
 
     def _present(self) -> None:
         fields = self._view_args()
+        if self.phase == "running" and self.use_draft and self._present_draft(fields):
+            return
         if self.use_rich and self._present_rich(fields):
             return
         formatted = build_run_html(**fields)
@@ -1446,6 +1505,20 @@ class LiveBoard:
             )
         self.message_id = anchor
         self.visible = anchor_visible
+
+    def _present_draft(self, fields: dict) -> bool:
+        markdown = build_run_rich_markdown(**fields, draft=True)
+        marker = "draft\n" + markdown
+        if marker == self.visible:
+            return True
+        try:
+            self.telegram.send_draft(self.chat_id, self.draft_id, markdown)
+        except RuntimeError as exc:
+            log.info("rich draft failed, using a saved message: %s", exc)
+            self.use_draft = False
+            return False
+        self.visible = marker
+        return True
 
     def _present_rich(self, fields: dict) -> bool:
         markdown = build_run_rich_markdown(**fields)
@@ -1707,6 +1780,7 @@ class Bridge:
         self.runner = Runner()
         self.pending: deque[Prompt] = deque()
         self.queue_lock = threading.Lock()
+        self.active_draft_id: int | None = None
         self.drop_session = False
         self.default_workspace = default_workspace(home)
 
@@ -1799,7 +1873,7 @@ class Bridge:
                     {
                         "offset": self.state.data.get("offset", 0),
                         "timeout": timeout,
-                        "allowed_updates": ["message", "callback_query"],
+                        "allowed_updates": ALLOWED_UPDATES,
                     },
                     timeout=timeout + 15,
                 )
@@ -1817,7 +1891,7 @@ class Bridge:
         while True:
             updates = self.telegram.call(
                 "getUpdates",
-                {"offset": self.state.data.get("offset", 0), "timeout": 0, "allowed_updates": ["message", "callback_query"]},
+                {"offset": self.state.data.get("offset", 0), "timeout": 0, "allowed_updates": ALLOWED_UPDATES},
                 timeout=30,
             )
             batch = updates.get("result") or []
@@ -1920,6 +1994,10 @@ class Bridge:
         update_id = int(update.get("update_id", 0))
         self.state.data["offset"] = update_id + 1
         self.state.save()
+        stopped = update.get("stopped_message_generation")
+        if isinstance(stopped, dict):
+            self.on_generation_stopped(stopped)
+            return
         query = update.get("callback_query")
         if isinstance(query, dict):
             self.on_callback(query)
@@ -2323,6 +2401,35 @@ class Bridge:
             project=Path(workspace).name,
             reply_to=message_id,
         )
+        self.active_draft_id = board.draft_id
+        try:
+            return self._execute_board(chat_id, user_id, prompt, workspace, mode, session_id, board)
+        finally:
+            if self.active_draft_id == board.draft_id:
+                self.active_draft_id = None
+
+    def on_generation_stopped(self, stopped: dict) -> None:
+        chat = stopped.get("chat") or {}
+        chat_id = chat.get("id")
+        if chat.get("type") not in {None, "private"} or not isinstance(chat_id, int):
+            return
+        if self.verified_phone(chat_id) is None:
+            return
+        if stopped.get("draft_id") != self.active_draft_id or not self.runner.busy():
+            return
+        log.info("draft %s stopped", self.active_draft_id)
+        self.runner.stop()
+
+    def _execute_board(
+        self,
+        chat_id: int,
+        user_id: int,
+        prompt: str,
+        workspace: str,
+        mode: str,
+        session_id: str,
+        board: LiveBoard,
+    ) -> str:
         board.publish(force=True)
         sent: set[str] = set()
 
