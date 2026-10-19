@@ -117,11 +117,56 @@ def normalize_model(raw: str) -> str:
     return name
 
 
+EFFORT_LEVELS = ["default", "low", "medium", "high", "xhigh", "max"]
+CLAUDE_MODELS = ["default", "fable", "opus", "sonnet", "haiku"]
+
+
+def claude_model() -> str:
+    return os.environ.get("CLAUDE_MODEL", "").strip() or "default"
+
+
+def claude_model_args(name: str) -> list[str]:
+    chosen = (name or "").strip()
+    if not chosen or chosen == "default":
+        return []
+    return ["--model", chosen]
+
+
+def effort_args(level: str) -> list[str]:
+    chosen = (level or "").strip()
+    return ["--effort", chosen] if chosen in EFFORT_LEVELS[1:] else []
+
+
+def parse_model_list(text: str) -> list[tuple[str, str]]:
+    """Read `id - Label` lines from `agent --list-models`."""
+    found: list[tuple[str, str]] = []
+    for line in text.splitlines():
+        ident, sep, label = line.partition(" - ")
+        ident = ident.strip()
+        if sep and ident and " " not in ident:
+            found.append((ident, "".join(ch for ch in label if ch.isprintable()).strip()))
+    return found
+
+
+def model_family(ident: str) -> str:
+    return ident.removeprefix("cursor-").split("-")[0]
+
+
 def model_args(name: str) -> list[str]:
     chosen = (name or "").strip()
     if not chosen or chosen == "auto":
         return []
     return ["--model", chosen]
+
+def find_claude() -> str:
+    override = os.environ.get("CLAUDE_CLI", "").strip()
+    if override:
+        return override
+    local = Path.home() / ".local" / "bin" / "claude"
+    if local.is_file() and os.access(local, os.X_OK):
+        return str(local)
+    raise ConfigError("Claude Code is not installed at ~/.local/bin/claude")
+
 
 def find_agent() -> str:
     override = os.environ.get("CURSOR_AGENT", "").strip()

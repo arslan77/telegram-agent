@@ -2,4 +2,6 @@ __pycache__/
 *.pyc
 .venv/
 state.json
+.cursor-telegram/
 .env
+.cursor/rules/force-push.mdc

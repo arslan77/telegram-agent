@@ -25,11 +25,13 @@ class LiveBoard:
         project: str = "",
         reply_to: int | None = None,
         message_id: int | None = None,
+        actor: str = "Cursor",
     ) -> None:
         self.telegram = telegram
         self.chat_id = chat_id
         self.on_message = on_message
         self.model = (model or "auto").strip() or "auto"
+        self.actor = actor if actor in {"Cursor", "Claude"} else "Cursor"
         self.project = project or "workspace"
         self.reply_to = reply_to if isinstance(reply_to, int) else None
         self.session_label = "new"
@@ -190,6 +192,7 @@ class LiveBoard:
     def _rich_doc(self, fields: dict, body: str, *, continued: bool, buttons: bool) -> str:
         data = dict(fields)
         data["body"] = body
+        data["actor"] = self.actor
         return build_run_rich_markdown(**data, continued=continued, buttons=buttons)
 
     def _present_rich(self, fields: dict) -> bool:

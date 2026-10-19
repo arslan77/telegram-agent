@@ -15,7 +15,7 @@ def close_rich_fence(text: str) -> str:
     return text
 
 
-def rich_tool_details(tools: list[str] | None) -> str:
+def rich_tool_details(tools: list[str] | None, actor: str = "Cursor") -> str:
     shown = [entry for entry in (tools or []) if entry.strip()][-30:]
     if not shown:
         return ""
@@ -26,7 +26,8 @@ def rich_tool_details(tools: list[str] | None) -> str:
         extra = rest.strip()
         if extra:
             lines.append(close_rich_fence(extra))
-    return "<details><summary>What Cursor did</summary>\n\n" + "\n\n".join(lines) + "\n\n</details>"
+    name = actor if actor in {"Cursor", "Claude"} else "Cursor"
+    return f"<details><summary>What {name} did</summary>\n\n" + "\n\n".join(lines) + "\n\n</details>"
 
 
 def safe_thinking_text(text: str, limit: int = 3500) -> str:
@@ -92,6 +93,7 @@ def build_run_rich_markdown(
     phase: str,
     tools: list[str] | None = None,
     thinking: str = "",
+    actor: str = "Cursor",
     draft: bool = False,
     continued: bool = False,
     buttons: bool | None = None,
@@ -127,7 +129,7 @@ def build_run_rich_markdown(
             parts.append(close_rich_fence(preview))
         else:
             parts.append("*(no output)*")
-    details = rich_tool_details(tools)
+    details = rich_tool_details(tools, actor)
     if details:
         parts.append(details)
     if buttons:

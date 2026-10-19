@@ -66,7 +66,17 @@ This writes `~/.config/cursor-telegram/env` with mode `600`, installs a systemd 
 
 The bot answers in a private chat only. Telegram attaches the shared contact to the sender's account. A typed number or someone else's contact is ignored. When the number is on the list, that Telegram user stays allowed until the number is removed and the service is restarted. Anyone else gets a refusal and no Cursor session.
 
-The bot runs as the user who starts it. That user can edit files and run commands in the chosen folder, the same as the Cursor CLI.
+The bot runs as the user who starts it. In `agent` mode the agent has that user's full power on purpose: Claude Code runs with `bypassPermissions` and Cursor with `--force` and no sandbox. The chosen folder is only where it starts, not a boundary, and on a host with passwordless sudo that includes root. The bot's own guardrails are narrower: only allowlisted phones can reach it, `/files` never offers keys, `.ssh`, `.config` or the bot's state, and the Telegram token and phone list are removed from the agent's environment. Use `/mode ask` or `/mode plan` when you want it to stop editing.
+
+## Setup page
+
+The bot serves a small page on `127.0.0.1:8787` of the machine it runs on. It switches between Cursor and Claude Code, sets the model, Claude effort and mode, and signs each tool in: the Sign in button starts the vendor's own login, shows the link it prints, and has a box for a code if the login asks for one. Passwords are never typed into the page.
+
+```bash
+./scripts/ui.sh
+```
+
+This prints the address with its key and the SSH tunnel command for opening it from another computer. The key lives in `~/.config/cursor-telegram/ui-key`. The page refuses other host names, needs the key on every request, and never listens on the network. Set `CURSOR_TELEGRAM_UI=off` to disable it or `CURSOR_TELEGRAM_UI_PORT` to move it. Changes apply to the next message; model, effort and mode are written to every existing chat.
 
 ## Run in the foreground
 
@@ -81,7 +91,7 @@ Run `scripts/install.sh` once so that env file exists, or export the same variab
 
 `/status` shows the account, folder, and chat. `/new` starts a fresh chat. `/cancel` stops the current run. A message sent while Cursor is busy waits its turn. That queue is saved, so a restart keeps the waiting messages and continues them in the same Telegram message.
 
-`/mode agent` edits files and runs commands. `/mode ask` is read-only. `/mode plan` plans only. `/model` shows or sets the Cursor model for the next message. `/model auto` uses the CLI default. `/workspace` shows or sets the folder.
+`/cli cursor` and `/cli claude` choose which local tool runs the next message. Each tool keeps its own session. A run already in progress finishes on the tool it started with. `/mode agent` edits files and runs commands. `/mode ask` is read-only. `/mode plan` plans only. `/model` shows or sets the Cursor model for the next message. `/model auto` uses the CLI default. `/workspace` shows or sets the folder.
 
 `/clear` deletes chat messages in Telegram and keeps the Cursor session. `/files` lists files in the folder, including photos and audio.
 
