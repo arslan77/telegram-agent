@@ -331,83 +331,114 @@ PAGE = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Agent setup</title>
 <style>
-:root{color-scheme:light dark;--bg:#f6f7f9;--card:#fff;--ink:#14171c;--mute:#667085;--line:#dfe3e8;--accent:#2563eb;--ok:#15803d;--bad:#b42318}
-@media(prefers-color-scheme:dark){:root{--bg:#0f1115;--card:#171a21;--ink:#e8eaed;--mute:#98a2b3;--line:#272c36;--accent:#6d9bff;--ok:#4ade80;--bad:#f87171}}
+:root{color-scheme:light dark;--bg:#f6f7f9;--card:#fff;--ink:#14171c;--mute:#667085;--line:#dfe3e8;--accent:#2563eb;--ok:#15803d;--bad:#b42318;--wait:#b45309;--glow:rgba(37,99,235,.55);--okglow:rgba(21,128,61,.45);--shadow:rgba(16,24,40,.08)}
+@media(prefers-color-scheme:dark){:root{--bg:#0f1115;--card:#171a21;--ink:#e8eaed;--mute:#98a2b3;--line:#272c36;--accent:#6d9bff;--ok:#4ade80;--bad:#f87171;--wait:#fbbf24;--glow:rgba(109,155,255,.55);--okglow:rgba(74,222,128,.45);--shadow:rgba(0,0,0,.4)}}
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes pop{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:none}}
+@keyframes breathe{0%{box-shadow:0 0 0 0 var(--okglow)}70%,100%{box-shadow:0 0 0 7px transparent}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes flash{from{box-shadow:0 0 0 0 var(--glow)}to{box-shadow:0 0 0 12px transparent}}
+@keyframes shimmer{to{background-position:200% center}}
+@keyframes blink{0%,80%,100%{opacity:.15}40%{opacity:1}}
+@keyframes waitpulse{50%{opacity:.45}}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,sans-serif}
-main{max-width:760px;margin:0 auto;padding:28px 18px 60px}h1{font-size:22px;margin:0 0 4px}.sub{color:var(--mute);margin:0 0 22px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:16px}
+main{max-width:760px;margin:0 auto;padding:28px 18px 60px}
+h1{font-size:24px;margin:0 0 4px;background:linear-gradient(90deg,var(--ink) 0%,var(--accent) 45%,var(--ink) 90%);background-size:200% auto;-webkit-background-clip:text;background-clip:text;color:transparent;animation:rise .5s both,shimmer 7s linear 1s infinite}
+.sub{color:var(--mute);margin:0 0 22px;animation:rise .5s .08s both}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:16px;box-shadow:0 1px 2px var(--shadow);animation:rise .55s cubic-bezier(.2,.7,.2,1) both;animation-delay:calc(120ms + var(--i) * 75ms);transition:box-shadow .25s,transform .25s}
+.card:hover{box-shadow:0 8px 24px var(--shadow)}
 h2{font-size:15px;margin:0 0 12px}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:8px 0}
-.seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
-.seg button{border:0;background:none;color:var(--ink);padding:8px 16px;cursor:pointer;font:inherit}
-.seg button.on{background:var(--accent);color:#fff}
-label{color:var(--mute);min-width:90px;font-size:13px}select,input{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 10px}
-select{min-width:240px}input.code{flex:1;min-width:200px}
-button.act{font:inherit;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:8px;padding:7px 14px;cursor:pointer}
+.seg{position:relative;display:inline-flex;border:1px solid var(--line);border-radius:11px;padding:3px;background:var(--bg)}
+.seg::before{content:"";position:absolute;top:3px;bottom:3px;left:3px;width:calc(50% - 3px);border-radius:8px;background:var(--accent);box-shadow:0 2px 8px var(--glow);transition:transform .38s cubic-bezier(.2,.7,.2,1)}
+.seg[data-on=claude]::before{transform:translateX(100%)}
+.seg button{position:relative;z-index:1;width:132px;border:0;background:none;color:var(--ink);padding:8px 0;cursor:pointer;font:inherit;font-weight:500;transition:color .25s}
+.seg button.on{color:#fff}
+label{color:var(--mute);min-width:90px;font-size:13px}select,input{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 10px;transition:border-color .2s,box-shadow .2s}
+select:focus,input:focus{outline:0;border-color:var(--accent);box-shadow:0 0 0 3px var(--glow)}
+select{min-width:240px}input.code{flex:1;min-width:200px}.flash{animation:flash .7s ease-out}
+button.act{font:inherit;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:8px;padding:7px 14px;cursor:pointer;transition:transform .12s,box-shadow .2s,opacity .2s}
+button.act:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 4px 12px var(--shadow)}button.act:active:not(:disabled){transform:scale(.97)}button.act:disabled{opacity:.6;cursor:default}
 button.pri{background:var(--accent);border-color:var(--accent);color:#fff}
-.pill{font-size:12px;padding:2px 9px;border-radius:99px;border:1px solid var(--line)}.ok{color:var(--ok)}.bad{color:var(--bad)}
+button.busy::before{content:"";display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;margin-right:8px;vertical-align:-2px;animation:spin .8s linear infinite}
+.pill{font-size:12px;padding:2px 9px;border-radius:99px;border:1px solid var(--line);display:inline-flex;align-items:center;gap:6px}
+.pill::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.ok{color:var(--ok)}.bad{color:var(--bad)}.pill.ok::before{animation:breathe 2.4s ease-out infinite}
+.pill.wait{color:var(--wait)}.pill.wait::before{animation:waitpulse 1s ease-in-out infinite}
 .tool{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}.who{color:var(--mute);font-size:13px}
+.toolcard{margin-bottom:14px}.toolcard.enter{animation:rise .45s both}.step{animation:pop .4s both}
 pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;white-space:pre-wrap;word-break:break-all;max-height:160px;overflow:auto;font-size:12px;margin:8px 0}
-.warn{color:var(--mute);font-size:13px;margin:6px 0 0}#toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 16px;border-radius:9px;opacity:0;transition:.2s;pointer-events:none}
-#toast.show{opacity:1}a{color:var(--accent);word-break:break-all}
+.warn{color:var(--mute);font-size:13px;margin:6px 0 0}.d i{display:inline-block;width:4px;height:4px;margin-left:3px;border-radius:50%;background:currentColor;animation:blink 1.4s infinite}.d i:nth-child(2){animation-delay:.2s}.d i:nth-child(3){animation-delay:.4s}
+#toast{position:fixed;bottom:16px;left:50%;transform:translate(-50%,14px);background:var(--ink);color:var(--bg);padding:9px 18px;border-radius:10px;opacity:0;transition:.28s cubic-bezier(.2,.7,.2,1);pointer-events:none;box-shadow:0 8px 24px var(--shadow)}
+#toast.show{opacity:1;transform:translate(-50%,0)}a{color:var(--accent);word-break:break-all}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 </style></head><body><main>
 <h1>Agent setup</h1><p class="sub">Choose the tool the Telegram bot uses and sign each one in. Changes apply to the next message.</p>
-<div class="card"><h2>Tool for the next message</h2>
+<div class="card" style="--i:0"><h2>Tool for the next message</h2>
 <div class="seg" id="cli"><button data-v="cursor">Cursor</button><button data-v="claude">Claude Code</button></div>
 <p class="warn" id="busy"></p></div>
-<div class="card"><h2>Sign in</h2><div id="tools"></div></div>
-<div class="card"><h2>Cursor</h2>
+<div class="card" style="--i:1"><h2>Sign in</h2><div id="tools"></div></div>
+<div class="card" style="--i:2"><h2>Cursor</h2>
 <div class="row"><label for="model">Model</label><select id="model"></select></div></div>
-<div class="card"><h2>Claude Code</h2>
+<div class="card" style="--i:3"><h2>Claude Code</h2>
 <div class="row"><label for="claude_model">Model</label><select id="claude_model"></select></div>
 <div class="row"><label for="effort">Effort</label><select id="effort"></select></div></div>
-<div class="card"><h2>Mode</h2>
+<div class="card" style="--i:4"><h2>Mode</h2>
 <div class="row"><label for="mode">Mode</label><select id="mode"></select></div>
 <p class="warn">agent can edit files and run any command as this user. ask is read only. plan only plans.</p></div>
 <div id="toast"></div></main>
 <script>
 const $=id=>document.getElementById(id);
 const H={"Content-Type":"application/json","X-Requested-With":"setup"};
-let state=null,busy=false,editing=false;
-function toast(t){const e=$("toast");e.textContent=t;e.classList.add("show");setTimeout(()=>e.classList.remove("show"),2200)}
+let state=null,editing=false;const sigs={};
+function toast(t){const e=$("toast");e.textContent=t;e.classList.add("show");clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove("show"),2200)}
+function flash(el){el.classList.remove("flash");void el.offsetWidth;el.classList.add("flash")}
 async function post(p,b){const r=await fetch(p,{method:"POST",headers:H,body:JSON.stringify(b||{})});const j=await r.json();if(!r.ok)throw new Error(j.error||r.status);return j}
 function fill(sel,items,val){const s=$(sel);if(editing&&document.activeElement===s)return;
  const want=items.map(i=>i.id+"|"+i.label).join(",");if(s.dataset.k!==want){s.innerHTML="";for(const i of items){const o=document.createElement("option");o.value=i.id;o.textContent=i.label;s.appendChild(o)}s.dataset.k=want}
  if(![...s.options].some(o=>o.value===val)){const o=document.createElement("option");o.value=val;o.textContent=val;s.appendChild(o)}
  s.value=val}
 function simple(a){return a.map(x=>({id:x,label:x}))}
+function toolCard(t,st,lg){
+ const d=document.createElement("div");d.className="toolcard";
+ const top=document.createElement("div");top.className="tool";
+ const name=document.createElement("div");name.innerHTML="<b></b> <span class='pill'></span><div class='who'></div>";
+ name.querySelector("b").textContent=t==="cursor"?"Cursor":"Claude Code";
+ const pill=name.querySelector(".pill");const running=!!(lg&&lg.running);
+ pill.textContent=running?"signing in":!st.installed?"not installed":st.signed_in?"signed in":"signed out";
+ pill.className="pill "+(running?"wait":st.signed_in?"ok":"bad");
+ name.querySelector(".who").textContent=[st.account,st.detail].filter(Boolean).join(" · ");
+ const btn=document.createElement("button");btn.className="act"+(st.signed_in||running?"":" pri")+(running?" busy":"");
+ btn.textContent=running?"Signing in":st.signed_in?"Sign in again":"Sign in";
+ btn.disabled=!st.installed||running;btn.onclick=async()=>{btn.disabled=true;btn.classList.add("busy");try{await post("/api/login",{tool:t});load()}catch(e){toast(e.message);load()}};
+ top.append(name,btn);d.appendChild(top);
+ if(lg&&(lg.running||lg.output)){
+  if(lg.url){const p=document.createElement("p");p.className="step";p.append("Open this link, approve, then ");const a=document.createElement("a");a.href=lg.url;a.target="_blank";a.rel="noopener noreferrer";a.textContent=lg.url;p.append(lg.running?"come back here: ":"(done): ",a);d.appendChild(p)}
+  const pre=document.createElement("pre");pre.textContent=lg.output||"Starting…";d.appendChild(pre);
+  if(lg.running){const r=document.createElement("div");r.className="row";const i=document.createElement("input");i.className="code";i.placeholder="If the page gives you a code, paste it here";
+   const send=document.createElement("button");send.className="act";send.textContent="Send code";send.onclick=async()=>{try{await post("/api/login/code",{tool:t,code:i.value});i.value="";toast("Code sent")}catch(e){toast(e.message)}};
+   const c=document.createElement("button");c.className="act";c.textContent="Cancel";c.onclick=()=>post("/api/login/cancel",{tool:t}).then(load);
+   r.append(i,send,c);d.appendChild(r)}
+  else{const m=document.createElement("p");m.className="warn step "+(lg.ok?"ok":"bad");m.textContent=lg.ok?"Signed in.":"Sign-in did not finish. Try again.";d.appendChild(m)}}
+ return d}
 function render(){const s=state;
- for(const b of $("cli").children)b.classList.toggle("on",b.dataset.v===s.cli);
- $("busy").textContent=s.busy?"A run is in progress. It finishes on the tool it started with.":"";
+ $("cli").dataset.on=s.cli;for(const b of $("cli").children)b.classList.toggle("on",b.dataset.v===s.cli);
+ const busy=$("busy");if(s.busy&&!busy.firstChild){busy.append("A run is in progress. It finishes on the tool it started with");const d=document.createElement("span");d.className="d";d.innerHTML="<i></i><i></i><i></i>";busy.appendChild(d)}else if(!s.busy)busy.textContent="";
  fill("claude_model",simple(s.claude_models),s.settings.claude_model);
  fill("effort",simple(s.efforts),s.settings.effort);
  fill("mode",simple(s.modes),s.settings.mode);
  if(!$("model").dataset.k)fill("model",[{id:"auto",label:"auto"}],s.settings.model);else if($("model").value!==s.settings.model&&document.activeElement!==$("model"))$("model").value=s.settings.model;
- const box=$("tools");if(box.contains(document.activeElement)&&document.activeElement.tagName==="INPUT")return;box.innerHTML="";
- for(const t of ["cursor","claude"]){const st=s.tools[t],lg=s.logins[t];
-  const d=document.createElement("div");d.style.marginBottom="14px";
-  const top=document.createElement("div");top.className="tool";
-  const name=document.createElement("div");name.innerHTML="<b></b> <span class='pill'></span><div class='who'></div>";
-  name.querySelector("b").textContent=t==="cursor"?"Cursor":"Claude Code";
-  const pill=name.querySelector(".pill");pill.textContent=!st.installed?"not installed":st.signed_in?"signed in":"signed out";pill.className="pill "+(st.signed_in?"ok":"bad");
-  name.querySelector(".who").textContent=[st.account,st.detail].filter(Boolean).join(" · ");
-  const btn=document.createElement("button");btn.className="act"+(st.signed_in?"":" pri");btn.textContent=st.signed_in?"Sign in again":"Sign in";
-  btn.disabled=!st.installed||(lg&&lg.running);btn.onclick=async()=>{try{await post("/api/login",{tool:t});poll()}catch(e){toast(e.message)}};
-  top.append(name,btn);d.appendChild(top);
-  if(lg&&(lg.running||lg.output)){
-   if(lg.url){const p=document.createElement("p");p.append("Open this link, approve, then ");const a=document.createElement("a");a.href=lg.url;a.target="_blank";a.rel="noopener noreferrer";a.textContent=lg.url;p.append(lg.running?"come back here: ":"(done): ",a);d.appendChild(p)}
-   const pre=document.createElement("pre");pre.textContent=lg.output||"Starting…";d.appendChild(pre);
-   if(lg.running){const r=document.createElement("div");r.className="row";const i=document.createElement("input");i.className="code";i.placeholder="If the page gives you a code, paste it here";
-    const send=document.createElement("button");send.className="act";send.textContent="Send code";send.onclick=async()=>{try{await post("/api/login/code",{tool:t,code:i.value});i.value="";toast("Code sent")}catch(e){toast(e.message)}};
-    const c=document.createElement("button");c.className="act";c.textContent="Cancel";c.onclick=()=>post("/api/login/cancel",{tool:t});
-    r.append(i,send,c);d.appendChild(r)}
-   else{const m=document.createElement("p");m.className="warn "+(lg.ok?"ok":"bad");m.textContent=lg.ok?"Signed in.":"Sign-in did not finish. Try again.";d.appendChild(m)}}
-  box.appendChild(d)}}
+ const box=$("tools");
+ for(const t of ["cursor","claude"]){const st=s.tools[t],lg=s.logins[t];const sig=JSON.stringify([st,lg]);
+  const old=box.querySelector("[data-tool="+t+"]");
+  if(old&&sigs[t]===sig)continue;
+  if(old&&old.contains(document.activeElement)&&document.activeElement.tagName==="INPUT")continue;
+  const card=toolCard(t,st,lg);card.dataset.tool=t;if(!old)card.classList.add("enter");
+  old?old.replaceWith(card):box.appendChild(card);sigs[t]=sig}}
 async function load(){const r=await fetch("/api/state");if(r.status===401){document.body.textContent="Open the address from scripts/ui.sh (it carries the key).";return}state=await r.json();render()}
-async function poll(){await load()}
 async function models(){const r=await fetch("/api/models");const j=await r.json();if(j.models.length){fill("model",j.models,state?state.settings.model:"auto")}}
 for(const b of $("cli").children)b.onclick=async()=>{try{await post("/api/config",{cli:b.dataset.v});toast("Next message uses "+b.textContent);load()}catch(e){toast(e.message)}};
 for(const f of ["model","claude_model","effort","mode"]){$(f).onfocus=()=>editing=true;$(f).onblur=()=>editing=false;
- $(f).onchange=async()=>{try{await post("/api/config",{[f]:$(f).value});toast("Saved");load()}catch(e){toast(e.message)}}}
+ $(f).onchange=async()=>{try{await post("/api/config",{[f]:$(f).value});flash($(f));toast("Saved");load()}catch(e){toast(e.message)}}}
 load().then(models);setInterval(load,2500);
 </script></body></html>
 """

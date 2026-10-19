@@ -2,7 +2,7 @@
 
 A private Telegram bot that runs a coding agent on your own computer. You message the bot. [Cursor](https://cursor.com/docs/cli/overview) or [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) edits files, runs commands, and answers in that same chat. The bot only makes outbound calls to Telegram, so the computer does not open a port.
 
-![A Telegram message runs Cursor or Claude Code on your computer, and the reply stays in the same chat](docs/architecture.svg)
+![A Telegram chat where you send a task and one reply edits itself as the agent reads files, runs a command, and finishes](docs/chat-demo.svg)
 
 ## What you get
 
@@ -13,6 +13,8 @@ A private Telegram bot that runs a coding agent on your own computer. You messag
 - **Files in both directions.** Send a photo or voice note and the agent can read it. Files the agent makes come back in the chat. `/files` lists the folder.
 - **A queue that survives restarts.** A message sent while the agent is busy waits its turn and continues after a restart.
 - **Locked to you.** Only allowlisted phone numbers get through, in private chat only.
+
+![A Telegram message runs Cursor or Claude Code on your computer, and the reply stays in the same chat](docs/architecture.svg)
 
 ![The /model buttons: Cursor model families, the models in one family, and the Claude Code aliases](docs/model-picker.svg)
 
