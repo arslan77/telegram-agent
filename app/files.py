@@ -8,7 +8,7 @@ import os
 import secrets
 
 from app.activity import _success_result, _tool_parts
-from app.constants import FILE_PAGE, MAX_UPLOAD, MEDIA_EXT, SKIP_DIRS
+from app.constants import FILE_PAGE, MAX_UPLOAD, MEDIA_EXT, SECRET_DIRS, SECRET_NAMES, SECRET_SUFFIXES, SKIP_DIRS
 
 
 def safe_filename(name: str) -> str:
@@ -38,9 +38,9 @@ def is_media(path: Path) -> bool:
 
 def blocked_file(path: Path) -> bool:
     name = path.name
-    if name.startswith(".env") or name in {"id_rsa", "credentials.json"}:
+    if name.startswith(".env") or name in SECRET_NAMES or path.suffix.lower() in SECRET_SUFFIXES:
         return True
-    return any(part in SKIP_DIRS for part in path.parts)
+    return any(part in SKIP_DIRS or part in SECRET_DIRS for part in path.parts)
 
 
 def inbound_prompt(path: Path, caption: str) -> str:

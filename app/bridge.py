@@ -15,13 +15,15 @@ import subprocess
 import threading
 import time
 
-from app.access import ConfigError, contact_phone, cursor_model, default_workspace, mask_phone, model_args, redact, resolve_workspace, split_text
+from app.access import CLAUDE_MODELS, EFFORT_LEVELS, ConfigError, claude_model, contact_phone, cursor_model, default_workspace, find_claude, mask_phone, model_family, parse_model_list, redact, resolve_workspace, split_text
 from app.board import LiveBoard
 from app.chatlog import message_ids_for_clear
+from app.claude_stream import adapt_claude
 from app.client import Telegram
 from app.constants import ALLOWED_UPDATES, FILE_PAGE, HELP, MAX_DOWNLOAD, MAX_QUEUE, MAX_UPLOAD, REACTION_CANCELLED, REACTION_DONE, REACTION_ERROR, REACTION_QUEUED, REACTION_WORKING, REMOVE_KEYBOARD, RUN_TIMEOUT_SEC, SHARE, log
 from app.events import consume_event
 from app.files import attachment_from_message, blocked_file, changed_media, file_page, inbound_prompt, inside_workspace, list_sendable, media_index, media_kind, output_paths, safe_filename
+from app.launch import run_argv
 from app.commands import dispatch_callback, dispatch_text
 from app.html_text import escape_html
 from app.runner import Runner, stop_process
@@ -87,6 +89,7 @@ class Bridge:
         self.state = state
         self.allow = allow
         self.agent = agent
+        self.claude: str | None = None
         self.home = home
         self.runner = Runner()
         self.pending: deque[Prompt] = deque()
@@ -138,10 +141,23 @@ class Bridge:
         row.setdefault("workspace", str(self.default_workspace))
         row.setdefault("mode", "agent")
         row.setdefault("model", cursor_model())
+        row.setdefault("claude_model", claude_model())
+        row.setdefault("effort", "")
         row.setdefault("session_id", "")
+        row.setdefault("claude_session_id", "")
         if not isinstance(row.get("message_ids"), list):
             row["message_ids"] = []
         return row
+
+    def current_cli(self) -> str:
+        name = str(self.state.data.get("cli") or "cursor").strip().lower()
+        return name if name in {"cursor", "claude"} else "cursor"
+
+    def model_field(self, cli: str | None = None) -> str:
+        return "model" if (cli or self.current_cli()) == "cursor" else "claude_model"
+
+    def session_field(self, cli: str | None = None) -> str:
+        return "session_id" if (cli or self.current_cli()) == "cursor" else "claude_session_id"
 
     def remember(self, user_id: int, message_id: int | None) -> None:
         if not isinstance(message_id, int):
@@ -193,8 +209,10 @@ class Bridge:
                     {"command": "status", "description": "Account, folder, and chat"},
                     {"command": "new", "description": "Start a fresh chat"},
                     {"command": "cancel", "description": "Stop the current run"},
+                    {"command": "cli", "description": "Use Cursor or Claude Code"},
                     {"command": "mode", "description": "agent, ask, or plan"},
-                    {"command": "model", "description": "Show or set the Cursor model"},
+                    {"command": "effort", "description": "Set Claude Code effort"},
+                    {"command": "model", "description": "Pick the model for the current CLI"},
                     {"command": "workspace", "description": "Show or set the folder"},
                     {"command": "clear", "description": "Delete chat messages, keep the Cursor session"},
                     {"command": "files", "description": "List or search files, including audio"},
@@ -462,6 +480,57 @@ class Bridge:
             rows.append([{"text": "More", "callback_data": f"fp:{page + 1}"}])
         self.say(user_id, chat_id, text, {"inline_keyboard": rows})
 
+    def show_effort(self, chat_id: int, user_id: int) -> None:
+        current = self.chat(user_id).get("effort") or "default"
+        buttons = [{"text": ("✓ " if level == current else "") + level, "callback_data": f"e:{level}"} for level in EFFORT_LEVELS]
+        rows = [buttons[:3], buttons[3:]]
+        note = "" if self.current_cli() == "claude" else " It applies when /cli is claude."
+        self.say(user_id, chat_id, f"Claude Code effort is {current}.{note}", {"inline_keyboard": rows})
+
+    def cursor_models(self) -> list[tuple[str, str]]:
+        cached = getattr(self, "_model_cache", None)
+        if cached and time.time() - cached[0] < 600:
+            return cached[1]
+        try:
+            done = subprocess.run([self.agent, "--list-models"], capture_output=True, text=True, timeout=30)
+            models = parse_model_list(done.stdout)
+        except (OSError, subprocess.SubprocessError):
+            models = []
+        if models:
+            self._model_cache = (time.time(), models)
+        return models
+
+    def show_models(self, chat_id: int, user_id: int, family: str = "", page: int = 0) -> None:
+        cli = self.current_cli()
+        current = self.chat(user_id).get(self.model_field(cli)) or ""
+        if cli == "claude":
+            rows = [[{"text": ("✓ " if name == current else "") + name, "callback_data": f"m:{name}"}] for name in CLAUDE_MODELS]
+            self.say(user_id, chat_id, f"Claude Code model is {current or 'default'}. Pick one:", {"inline_keyboard": rows})
+            return
+        models = self.cursor_models()
+        if not models:
+            self.say(user_id, chat_id, f"Model is {current}. Could not list models; use /model name.")
+            return
+        if not family:
+            families = sorted({model_family(i) for i, _ in models if i != "auto"})
+            rows = [[{"text": ("✓ " if current == "auto" else "") + "auto", "callback_data": "m:auto"}]]
+            buttons = [{"text": f, "callback_data": f"mf:{f}:0"} for f in families]
+            rows += [buttons[i : i + 3] for i in range(0, len(buttons), 3)]
+            self.say(user_id, chat_id, f"Cursor model is {current}. Pick a family:", {"inline_keyboard": rows})
+            return
+        items = [(i, label) for i, label in models if model_family(i) == family]
+        size = 8
+        chunk = items[page * size : (page + 1) * size]
+        rows = [[{"text": ("✓ " if i == current else "") + (label or i)[:40], "callback_data": f"m:{i}"}] for i, label in chunk]
+        nav = []
+        if page > 0:
+            nav.append({"text": "Back", "callback_data": f"mf:{family}:{page - 1}"})
+        if (page + 1) * size < len(items):
+            nav.append({"text": "More", "callback_data": f"mf:{family}:{page + 1}"})
+        nav.append({"text": "Families", "callback_data": "mf::0"})
+        rows.append(nav)
+        self.say(user_id, chat_id, f"{family} models ({current} now):", {"inline_keyboard": rows})
+
     def _file_token(self, user_id: int, path: Path) -> str:
         token = secrets.token_hex(4)
         bucket = self.state.data.setdefault("file_tokens", {})
@@ -620,8 +689,9 @@ class Bridge:
     def status_text(self, user_id: int) -> str:
         row = self.chat(user_id)
         phone = self.verified_phone(user_id) or ""
-        account = self.account_line()
-        session = row.get("session_id") or "none"
+        cli = self.current_cli()
+        account = self.account_line() if cli == "cursor" else "Claude Code"
+        session = row.get(self.session_field(cli)) or "none"
         running = "running" if self.runner.busy() else "idle"
         waiting = self.queued()
         run_line = f"Run {running}"
@@ -635,7 +705,9 @@ class Bridge:
                 f"Phone {mask_phone(phone)}",
                 f"Folder {row.get('workspace')}",
                 f"Mode {row.get('mode')}",
-                f"Model {row.get('model') or cursor_model()}",
+                f"CLI {self.current_cli()}",
+                f"Model {row.get(self.model_field()) or 'default'}",
+                *([f"Effort {row.get('effort') or 'default'}"] if cli == "claude" else []),
                 f"Chat {session}",
                 run_line,
             ]
@@ -675,18 +747,34 @@ class Bridge:
 
     def agent_env(self) -> dict[str, str]:
         env = os.environ.copy()
-        env.pop("CURSOR_API_KEY", None)
+        for name in ("CURSOR_API_KEY", "TELEGRAM_BOT_TOKEN", "TELEGRAM_ALLOWED_PHONES", "TELEGRAM_ENV"):
+            env.pop(name, None)
         env["NO_OPEN_BROWSER"] = "1"
         local_bin = str(Path.home() / ".local" / "bin")
         env["PATH"] = local_bin + os.pathsep + env.get("PATH", "")
         return env
 
+    def _binary(self, cli: str) -> str:
+        if cli == "claude":
+            if self.claude:
+                return self.claude
+            return find_claude()
+        return self.agent
+
+    def _consume_line(self, line: str, acc: dict, board: LiveBoard, cli: str) -> None:
+        if cli != "claude":
+            consume_event(line, acc, board)
+            return
+        for event in adapt_claude(line, acc):
+            consume_event(json.dumps(event), acc, board)
+
     def execute(self, chat_id: int, user_id: int, prompt: str, message_id: int | None = None) -> str:
         row = self.chat(user_id)
         workspace = str(row.get("workspace") or self.default_workspace)
         mode = str(row.get("mode") or "agent")
-        model = str(row.get("model") or cursor_model())
-        session_id = str(row.get("session_id") or "")
+        cli = self.current_cli()
+        model = str(row.get(self.model_field(cli)) or ("auto" if cli == "cursor" else "default"))
+        session_id = str(row.get(self.session_field(cli)) or "")
         try:
             resolve_workspace(workspace, self.home)
         except ValueError as exc:
@@ -711,12 +799,13 @@ class Bridge:
             project=Path(workspace).name,
             reply_to=message_id,
             message_id=board_message_id,
+            actor="Cursor" if cli == "cursor" else "Claude",
         )
         if resumed:
             board.activity = "Continuing after a restart"
         self.active_draft_id = board.draft_id
         try:
-            return self._execute_board(chat_id, user_id, prompt, workspace, mode, model, session_id, board)
+            return self._execute_board(chat_id, user_id, prompt, workspace, mode, model, session_id, board, cli, str(row.get("effort") or ""))
         finally:
             if self.active_draft_id == board.draft_id:
                 self.active_draft_id = None
@@ -743,6 +832,8 @@ class Bridge:
         model: str,
         session_id: str,
         board: LiveBoard,
+        cli: str = "cursor",
+        effort: str = "",
     ) -> str:
         board.publish(force=True)
         sent: set[str] = set()
@@ -754,17 +845,18 @@ class Bridge:
             if self.deliver_file(chat_id, user_id, path):
                 sent.add(key)
 
-        outcome = self.spawn(workspace, mode, model, session_id, prompt, board, on_output)
+        outcome = self.spawn(workspace, mode, model, session_id, prompt, board, on_output, cli, effort)
         if outcome.get("resume_failed") and session_id:
             board.note("Starting a fresh chat")
-            outcome = self.spawn(workspace, mode, model, "", prompt, board, on_output)
+            outcome = self.spawn(workspace, mode, model, "", prompt, board, on_output, cli, effort)
         new_session = outcome.get("session_id") or ""
+        field = self.session_field(cli)
         if self.drop_session:
             self.drop_session = False
-            self.chat(user_id)["session_id"] = ""
+            self.chat(user_id)[field] = ""
             self.state.save()
         elif isinstance(new_session, str) and new_session:
-            self.chat(user_id)["session_id"] = new_session
+            self.chat(user_id)[field] = new_session
             self.state.save()
         board.flush()
         return board.phase if board.phase in {"done", "cancelled", "error"} else "done"
@@ -778,27 +870,25 @@ class Bridge:
         prompt: str,
         board: LiveBoard,
         on_output=None,
+        cli: str = "cursor",
+        effort: str = "",
     ) -> dict:
-        cmd = [
-            self.agent,
-            "-p",
-            "--force",
-            "--trust",
-            "--approve-mcps",
-            "--sandbox",
-            "disabled",
-            "--output-format",
-            "stream-json",
-            "--stream-partial-output",
-            "--workspace",
-            workspace,
-        ]
-        if mode in {"ask", "plan"}:
-            cmd.extend(["--mode", mode])
-        cmd.extend(model_args(model))
-        if session_id:
-            cmd.extend(["--resume", session_id])
-        cmd.append(prompt)
+        tool_name = "Claude" if cli == "claude" else "Cursor"
+        try:
+            binary = self._binary(cli)
+        except ConfigError as exc:
+            board.finish(str(exc), "error")
+            return {"text": board.transcript.render(), "session_id": "", "cancelled": False, "resume_failed": False}
+        cmd = run_argv(
+            cli,
+            binary=binary,
+            workspace=workspace,
+            mode=mode,
+            model=model,
+            session_id=session_id,
+            prompt=prompt,
+            effort=effort,
+        )
         acc = {"last": "", "result": "", "tool": "", "session_id": "", "is_error": False, "duration_ms": 0}
         root = Path(workspace)
         before_media = media_index(root)
@@ -814,7 +904,7 @@ class Bridge:
                 start_new_session=True,
             )
         except OSError as exc:
-            board.finish(f"Could not start Cursor: {exc}", "error")
+            board.finish(f"Could not start {tool_name}: {exc}", "error")
             return {"text": board.transcript.render(), "session_id": "", "cancelled": False, "resume_failed": False}
         self.runner.attach(proc)
         lines: queue.Queue[str | None] = queue.Queue()
@@ -838,7 +928,7 @@ class Bridge:
                 continue
             if line is None:
                 break
-            consume_event(line, acc, board)
+            self._consume_line(line, acc, board, cli)
             tool_call = acc.pop("pending_tool", None)
             if on_output is not None and tool_call is not None:
                 for path in output_paths(tool_call, root):
@@ -860,18 +950,21 @@ class Bridge:
         if resume_failed:
             return {"text": "", "session_id": "", "cancelled": False, "resume_failed": True}
         if auth_failed:
-            board.finish(
-                "Cursor is not signed in. Run scripts/login.sh and open the URL it prints.",
-                "error",
-            )
+            if cli == "claude":
+                board.finish("Claude is not signed in. Run claude auth login and open the URL it prints.", "error")
+            else:
+                board.finish(
+                    "Cursor is not signed in. Run scripts/login.sh and open the URL it prints.",
+                    "error",
+                )
         elif timed_out:
             board.finish(produced or "Stopped because the run exceeded 45 minutes.", "cancelled")
         elif cancelled:
             board.finish(produced or "Stopped.", "cancelled")
         elif acc.get("is_error"):
-            board.finish(produced or "Cursor reported an error.", "error")
+            board.finish(produced or f"{tool_name} reported an error.", "error")
         elif not produced:
-            detail = redact(stderr.strip(), self.telegram.token) or f"Cursor exited {proc.returncode}."
+            detail = redact(stderr.strip(), self.telegram.token) or f"{tool_name} exited {proc.returncode}."
             board.finish(detail[:1500], "error")
         else:
             board.finish(produced, "done")

@@ -12,6 +12,7 @@ from app.bridge import Bridge
 from app.client import Telegram
 from app.constants import log
 from app.state import State
+from app.webui import SetupPage
 
 
 def main() -> None:
@@ -22,9 +23,20 @@ def main() -> None:
     state_path = Path(os.environ.get("CURSOR_TELEGRAM_STATE", home / ".local" / "share" / "cursor-telegram" / "state.json"))
     bridge = Bridge(Telegram(token), State(state_path), allow, find_agent(), home)
 
+    page = None
+    if os.environ.get("CURSOR_TELEGRAM_UI", "on").lower() != "off":
+        try:
+            page = SetupPage(bridge)
+            page.start()
+        except OSError as exc:
+            log.warning("setup page not started: %s", exc.strerror)
+            page = None
+
     def on_stop(signum, _frame) -> None:
         log.info("signal %s", signum)
         bridge.runner.stop()
+        if page is not None:
+            page.stop()
         raise SystemExit(0)
 
     signal.signal(signal.SIGTERM, on_stop)

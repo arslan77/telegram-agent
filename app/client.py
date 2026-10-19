@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import contextlib
 import json
 import secrets
 import threading
@@ -30,7 +31,7 @@ class Telegram:
             method="POST",
         )
         try:
-            with self._lock:
+            with (contextlib.nullcontext() if method == "getUpdates" else self._lock):
                 with urllib.request.urlopen(request, timeout=timeout) as response:
                     body = response.read()
         except urllib.error.HTTPError as exc:

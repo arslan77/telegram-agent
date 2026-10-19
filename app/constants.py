@@ -21,6 +21,10 @@ REACTION_WORKING = "⚡"
 REACTION_DONE = "👍"
 REACTION_CANCELLED = "😐"
 REACTION_ERROR = "👎"
+# Never offered or sent from Telegram: the bot's own token, SSH/cloud keys, saved state.
+SECRET_DIRS = {".ssh", ".gnupg", ".aws", ".config", ".kube", ".docker"}
+SECRET_NAMES = {"id_rsa", "id_ed25519", "id_ecdsa", "credentials.json", "state.json", "env", ".netrc", ".npmrc", ".pypirc"}
+SECRET_SUFFIXES = {".pem", ".key", ".p12", ".pfx"}
 SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", "dist", "build"}
 MEDIA_EXT = {
     ".png", ".jpg", ".jpeg", ".webp", ".gif",
@@ -42,12 +46,15 @@ HELP = "\n".join(
         "Cursor is running on this machine under your account.",
         "",
         "/status",
+        "/cli cursor — use Cursor for the next message",
+        "/cli claude — use Claude Code for the next message",
         "/new — start a fresh chat",
         "/cancel — stop the current run. Queued messages still run",
         "/mode agent — edit files and run commands",
         "/mode ask — read only",
         "/mode plan — plan only",
-        "/model — show or set the Cursor model for the next message",
+        "/effort — set Claude Code effort (buttons), or /effort high",
+        "/model — pick the model for the current CLI (buttons), or /model name",
         "/workspace — show or set the folder (inside your home directory)",
         "/clear — delete chat messages here. The Cursor session stays",
         "/files — newest files in the folder. Tap one to get it",

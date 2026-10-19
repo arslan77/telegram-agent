@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from app.access import is_cloud_handoff, normalize_model, parse_command, resolve_workspace
+from app.access import EFFORT_LEVELS, is_cloud_handoff, normalize_model, parse_command, resolve_workspace
 from app.constants import HELP
 
 CommandHandler = Callable[..., None]
@@ -108,9 +108,23 @@ def status_command(bridge, chat_id: int, user_id: int, rest: str, message_id: in
 def new_command(bridge, chat_id: int, user_id: int, rest: str, message_id: int | None) -> None:
     if bridge.runner.busy():
         bridge.drop_session = True
-    bridge.chat(user_id)["session_id"] = ""
+    bridge.chat(user_id)[bridge.session_field()] = ""
     bridge.state.save()
     bridge.say(user_id, chat_id, "Next message starts a fresh chat.")
+
+
+@command("/cli")
+def cli_command(bridge, chat_id: int, user_id: int, rest: str, message_id: int | None) -> None:
+    if not rest:
+        bridge.say(user_id, chat_id, f"CLI is {bridge.current_cli()}.")
+        return
+    name = rest.split()[0].lower()
+    if name not in {"cursor", "claude"}:
+        bridge.say(user_id, chat_id, "Use /cli cursor or /cli claude.")
+        return
+    bridge.state.data["cli"] = name
+    bridge.state.save()
+    bridge.say(user_id, chat_id, f"CLI is {name}. The next message uses it.")
 
 
 @command("/mode")
@@ -128,20 +142,41 @@ def mode_command(bridge, chat_id: int, user_id: int, rest: str, message_id: int 
     bridge.say(user_id, chat_id, f"Mode is {mode}.")
 
 
-@command("/model")
-def model_command(bridge, chat_id: int, user_id: int, rest: str, message_id: int | None) -> None:
-    row = bridge.chat(user_id)
-    if not rest:
-        bridge.say(user_id, chat_id, f"Model is {row['model']}.")
-        return
+def set_model(bridge, chat_id: int, user_id: int, raw: str) -> None:
     try:
-        name = normalize_model(rest)
+        name = normalize_model(raw)
     except ValueError as exc:
         bridge.say(user_id, chat_id, str(exc))
         return
-    row["model"] = name
+    bridge.chat(user_id)[bridge.model_field()] = name
     bridge.state.save()
-    bridge.say(user_id, chat_id, f"Model is {name}. The next message uses it.")
+    bridge.say(user_id, chat_id, f"{bridge.current_cli()} model is {name}. The next message uses it.")
+
+
+@command("/model")
+def model_command(bridge, chat_id: int, user_id: int, rest: str, message_id: int | None) -> None:
+    if rest:
+        set_model(bridge, chat_id, user_id, rest)
+    else:
+        bridge.show_models(chat_id, user_id)
+
+
+def set_effort(bridge, chat_id: int, user_id: int, raw: str) -> None:
+    level = raw.split()[0].lower() if raw.strip() else ""
+    if level not in EFFORT_LEVELS:
+        bridge.say(user_id, chat_id, "Use /effort " + ", ".join(EFFORT_LEVELS) + ".")
+        return
+    bridge.chat(user_id)["effort"] = "" if level == "default" else level
+    bridge.state.save()
+    bridge.say(user_id, chat_id, f"Effort is {level}. The next Claude Code message uses it.")
+
+
+@command("/effort")
+def effort_command(bridge, chat_id: int, user_id: int, rest: str, message_id: int | None) -> None:
+    if rest:
+        set_effort(bridge, chat_id, user_id, rest)
+    else:
+        bridge.show_effort(chat_id, user_id)
 
 
 @command("/workspace")
@@ -159,6 +194,7 @@ def workspace_command(bridge, chat_id: int, user_id: int, rest: str, message_id:
         bridge.drop_session = True
     row["workspace"] = str(path)
     row["session_id"] = ""
+    row["claude_session_id"] = ""
     bridge.state.save()
     bridge.say(user_id, chat_id, f"Folder is {path}. The next message starts a fresh chat there.")
 
@@ -178,7 +214,7 @@ def status_button(bridge, user_id: int, chat_id: int, data: str) -> None:
 def end_button(bridge, user_id: int, chat_id: int, data: str) -> None:
     if bridge.runner.busy():
         bridge.drop_session = True
-    bridge.chat(user_id)["session_id"] = ""
+    bridge.chat(user_id)[bridge.session_field()] = ""
     bridge.state.save()
     bridge.say(user_id, chat_id, "Next message starts a fresh chat.")
 
@@ -198,3 +234,19 @@ def file_page_button(bridge, user_id: int, chat_id: int, page_text: str) -> None
     page = int(page_text) if page_text.isdigit() else 0
     row = bridge.chat(user_id)
     bridge.show_files(chat_id, user_id, str(row.get("file_query") or ""), page)
+
+
+@callback_prefix("m:")
+def model_button(bridge, user_id: int, chat_id: int, name: str) -> None:
+    set_model(bridge, chat_id, user_id, name)
+
+
+@callback_prefix("mf:")
+def model_family_button(bridge, user_id: int, chat_id: int, rest: str) -> None:
+    family, _, page = rest.rpartition(":")
+    bridge.show_models(chat_id, user_id, family, int(page) if page.isdigit() else 0)
+
+
+@callback_prefix("e:")
+def effort_button(bridge, user_id: int, chat_id: int, level: str) -> None:
+    set_effort(bridge, chat_id, user_id, level)
