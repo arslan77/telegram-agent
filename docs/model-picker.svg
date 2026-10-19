@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="400" viewBox="0 0 920 400" role="img" aria-labelledby="t d">
+  <title id="t">Model picker buttons in Telegram</title>
+  <desc id="d">An illustration of the /model button keyboards: Cursor model families, then the models in one family, and the Claude Code aliases.</desc>
+  <rect width="920" height="400" rx="28" fill="#f6f1e7"/>
+  <text x="48" y="50" text-anchor="start" fill="#1b1914" font-family="ui-sans-serif, system-ui, sans-serif" font-size="22" font-weight="700">/model shows buttons for whichever CLI is active</text>
+  <text x="48" y="76" text-anchor="start" fill="#5f584e" font-family="ui-sans-serif, system-ui, sans-serif" font-size="14" font-weight="400">Illustration of the button layout, not a screenshot.</text>
+  <rect x="40" y="100" width="260" height="270" rx="18" fill="#ffffff" stroke="#d8cdb6"/>
+  <text x="58" y="128" text-anchor="start" fill="#1b1914" font-family="ui-sans-serif, system-ui, sans-serif" font-size="14" font-weight="600">Cursor · pick a family</text>
+  <rect x="58" y="148" width="224" height="34" rx="9" fill="#ffffff" stroke="#d0d7e2"/>
+  <text x="170.0" y="170" text-anchor="middle" fill="#1b1914" font-family="ui-sans-serif, system-ui, sans-serif" font-size="14" font-weight="500">auto</text>
+  <rect x="58" y="192" width="70" height="34" rx="9" fill="#ffffff" stroke="#d0d7e2"/>
+  <text x="93" y="214" text-anchor="middle" fill="#1b1914" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13" font-weight="500">claude</text>
+  <rect x="134" y="192" width="70" height="34" rx="9" fill="#ffffff" stroke="#d0d7e2"/>
+  <text x="169" y="214" text-anchor="middle" fill="#1b1914" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13" font-weight="500">composer</text>
+  <rect x="210" y="192" width="70" height="34" rx="9" fill="#ffffff" stroke="#d0d7e2"/>
+  <text x="245" y="214" text-anchor="middle" fill="#1b1914" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13" font-weight="500">gemini</text>
+  <rect x="58" y="236" width="70" height="34" rx="9" fill="#ffffff" stroke="#d0d7e2"/>
+  <text x="93" y="258" text-anchor="middle" fill="#1b1914" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13" font-weight="500">glm</text>
+  <rect x="134" y="236" width="70" height="34" rx="9" fill="#ffffff" stroke="#d0d7e2"/>
+  <text x="169" y="258" text-anchor="middle" fill="#1b1914" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13" font-weight="500">gpt</text>
+  <rect x="210" y="236" width="70" height="34" rx="9" fill="#2563eb" stroke="#d0d7e2"/>
+  <text x="245" y="258" text-anchor="middle" fill="#ffffff" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13" font-weight="500">grok</text>
+  <rect x="58" y="280" width="70" height="34" rx="9" fill="#ffffff" stroke="#d0d7e2"/>
+  <text x="93" y="302" text-anchor="middle" fill="#1b1914" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13" font-weight="500">kimi</text>
+  <rect x="134" y="280" width="70" height="34" rx="9" fill="#ffffff" stroke="#d0d7e2"/>
+  <text x="169" y="302" text-anchor="middle" fill="#1b1914" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13" font-weight="500">muse</text>
+  <rect x="330" y="100" width="260" height="270" rx="18" fill="#ffffff" stroke="#d8cdb6"/>
+  <text x="348" y="128" text-anchor="start" fill="#1b1914" font-family="ui-sans-serif, system-ui, sans-serif" font-size="14" font-weight="600">Cursor · grok models</text>
+  <rect x="348" y="148" width="224" height="34" rx="9" fill="#2563eb" stroke="#d0d7e2"/>
+  <text x="460.0" y="170" text-anchor="middle" fill="#ffffff" font-family="ui-sans-serif, system-ui, sans-serif" font-size="14" font-weight="500">✓ Grok 4.7 High</text>
+  <rect x="348" y="192" width="224" height="34" rx="9" fill="#ffffff" stroke="#d0d7e2"/>
+  <text x="460.0" y="214" text-anchor="middle" fill="#1b1914" font-family="ui-sans-serif, system-ui, sans-serif" font-size="14" font-weight="500">Grok 4.7 High Fast</text>
+  <rect x="348" y="236" width="224" height="34" rx="9" fill="#ffffff" stroke="#d0d7e2"/>
+  <text x="460.0" y="258" text-anchor="middle" fill="#1b1914" font-family="ui-sans-serif, system-ui, sans-serif" font-size="14" font-weight="500">Grok 4.7 Medium</text>
+  <rect x="348" y="280" width="224" height="34" rx="9" fill="#ffffff" stroke="#d0d7e2"/>
+  <text x="460.0" y="302" text-anchor="middle" fill="#1b1914" font-family="ui-sans-serif, system-ui, sans-serif" font-size="14" font-weight="500">Grok 4.7 Low</text>
+  <rect x="348" y="328" width="70" height="34" rx="9" fill="#ffffff" stroke="#d0d7e2"/>
+  <text x="383.0" y="350" text-anchor="middle" fill="#1b1914" font-family="ui-sans-serif, system-ui, sans-serif" font-size="14" font-weight="500">Back</text>
+  <rect x="424" y="328" width="70" height="34" rx="9" fill="#ffffff" stroke="#d0d7e2"/>
+  <text x="459.0" y="350" text-anchor="middle" fill="#1b1914" font-family="ui-sans-serif, system-ui, sans-serif" font-size="14" font-weight="500">More</text>
+  <rect x="500" y="328" width="72" height="34" rx="9" fill="#ffffff" stroke="#d0d7e2"/>
+  <text x="536.0" y="350" text-anchor="middle" fill="#1b1914" font-family="ui-sans-serif, system-ui, sans-serif" font-size="14" font-weight="500">Families</text>
+  <rect x="620" y="100" width="260" height="270" rx="18" fill="#ffffff" stroke="#d8cdb6"/>
+  <text x="638" y="128" text-anchor="start" fill="#1b1914" font-family="ui-sans-serif, system-ui, sans-serif" font-size="14" font-weight="600">Claude Code · pick one</text>
+  <rect x="638" y="148" width="224" height="34" rx="9" fill="#2563eb" stroke="#d0d7e2"/>
+  <text x="750.0" y="170" text-anchor="middle" fill="#ffffff" font-family="ui-sans-serif, system-ui, sans-serif" font-size="14" font-weight="500">✓ default</text>
+  <rect x="638" y="192" width="224" height="34" rx="9" fill="#ffffff" stroke="#d0d7e2"/>
+  <text x="750.0" y="214" text-anchor="middle" fill="#1b1914" font-family="ui-sans-serif, system-ui, sans-serif" font-size="14" font-weight="500">fable</text>
+  <rect x="638" y="236" width="224" height="34" rx="9" fill="#ffffff" stroke="#d0d7e2"/>
+  <text x="750.0" y="258" text-anchor="middle" fill="#1b1914" font-family="ui-sans-serif, system-ui, sans-serif" font-size="14" font-weight="500">opus</text>
+  <rect x="638" y="280" width="224" height="34" rx="9" fill="#ffffff" stroke="#d0d7e2"/>
+  <text x="750.0" y="302" text-anchor="middle" fill="#1b1914" font-family="ui-sans-serif, system-ui, sans-serif" font-size="14" font-weight="500">sonnet</text>
+  <rect x="638" y="324" width="224" height="34" rx="9" fill="#ffffff" stroke="#d0d7e2"/>
+  <text x="750.0" y="346" text-anchor="middle" fill="#1b1914" font-family="ui-sans-serif, system-ui, sans-serif" font-size="14" font-weight="500">haiku</text>
+</svg>

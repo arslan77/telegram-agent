@@ -1,35 +1,40 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="920" height="450" viewBox="0 0 920 450" role="img" aria-labelledby="title desc">
-  <title id="title">A Telegram message runs on your computer and the reply stays in the same chat</title>
-  <desc id="desc">A private Telegram message reaches the bot, which checks the phone allowlist and keeps a queue. The bot starts the Cursor CLI on the same computer. The reply is edited into that same Telegram message. The bot does not open a port.</desc>
-  <rect width="920" height="450" rx="28" fill="#f6f1e7"/>
-  <text x="48" y="56" fill="#1b1914" font-family="ui-sans-serif, system-ui, sans-serif" font-size="22" font-weight="700">Your chat runs the computer. The reply stays in that chat.</text>
-  <text x="48" y="84" fill="#5f584e" font-family="ui-sans-serif, system-ui, sans-serif" font-size="15">No open port. The bot only calls out to Telegram.</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="470" viewBox="0 0 920 470" role="img" aria-labelledby="title desc">
+  <title id="title">A Telegram message runs Cursor or Claude Code on your computer and the reply stays in the same chat</title>
+  <desc id="desc">A private Telegram message reaches the bot, which checks the phone allowlist and keeps a queue. The bot starts either the Cursor CLI or Claude Code on the same computer, whichever /cli selects. The reply is edited into that same Telegram message. The bot does not open a port.</desc>
+  <rect width="920" height="470" rx="28" fill="#f6f1e7"/>
+  <text x="48" y="56" text-anchor="start" fill="#1b1914" font-family="ui-sans-serif, system-ui, sans-serif" font-size="22" font-weight="700">Your chat runs the computer. The reply stays in that chat.</text>
+  <text x="48" y="84" text-anchor="start" fill="#5f584e" font-family="ui-sans-serif, system-ui, sans-serif" font-size="15" font-weight="400">Cursor or Claude Code, your pick. No open port: the bot only calls out to Telegram.</text>
 
-  <circle cx="160" cy="196" r="58" fill="#fffdf8" stroke="#1b1914" stroke-width="2"/>
-  <text x="160" y="190" text-anchor="middle" fill="#1b1914" font-family="ui-sans-serif, system-ui, sans-serif" font-size="18" font-weight="700">Telegram</text>
-  <text x="160" y="212" text-anchor="middle" fill="#5f584e" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13">you</text>
+  <circle cx="160" cy="214" r="58" fill="#fffdf8" stroke="#1b1914" stroke-width="2"/>
+  <text x="160" y="208" text-anchor="middle" fill="#1b1914" font-family="ui-sans-serif, system-ui, sans-serif" font-size="18" font-weight="700">Telegram</text>
+  <text x="160" y="230" text-anchor="middle" fill="#5f584e" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13" font-weight="400">you</text>
 
-  <circle cx="460" cy="196" r="58" fill="#1b1914"/>
-  <text x="460" y="190" text-anchor="middle" fill="#f6f1e7" font-family="ui-sans-serif, system-ui, sans-serif" font-size="18" font-weight="700">Bot</text>
-  <text x="460" y="212" text-anchor="middle" fill="#e4d2ae" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13">allowlist</text>
+  <circle cx="450" cy="214" r="58" fill="#1b1914"/>
+  <text x="450" y="208" text-anchor="middle" fill="#f6f1e7" font-family="ui-sans-serif, system-ui, sans-serif" font-size="18" font-weight="700">Bot</text>
+  <text x="450" y="230" text-anchor="middle" fill="#e4d2ae" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13" font-weight="400">allowlist · queue</text>
 
-  <circle cx="760" cy="196" r="58" fill="#fffdf8" stroke="#1b1914" stroke-width="2"/>
-  <text x="760" y="190" text-anchor="middle" fill="#1b1914" font-family="ui-sans-serif, system-ui, sans-serif" font-size="18" font-weight="700">Cursor</text>
-  <text x="760" y="212" text-anchor="middle" fill="#5f584e" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13">this computer</text>
+  <circle cx="770" cy="150" r="48" fill="#fffdf8" stroke="#1b1914" stroke-width="2"/>
+  <text x="770" y="150" text-anchor="middle" fill="#1b1914" font-family="ui-sans-serif, system-ui, sans-serif" font-size="17" font-weight="700">Cursor</text>
+  <text x="770" y="170" text-anchor="middle" fill="#5f584e" font-family="ui-sans-serif, system-ui, sans-serif" font-size="12" font-weight="400">agent CLI</text>
 
-  <path d="M218 178 H402" stroke="#1b1914" stroke-width="2" fill="none"/>
-  <path d="M390 172 L404 178 L390 184" fill="#1b1914"/>
-  <text x="310" y="166" text-anchor="middle" fill="#5f584e" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13">message</text>
+  <circle cx="770" cy="282" r="48" fill="#fffdf8" stroke="#8a5a2b" stroke-width="2"/>
+  <text x="770" y="282" text-anchor="middle" fill="#1b1914" font-family="ui-sans-serif, system-ui, sans-serif" font-size="16" font-weight="700">Claude Code</text>
+  <text x="770" y="302" text-anchor="middle" fill="#5f584e" font-family="ui-sans-serif, system-ui, sans-serif" font-size="12" font-weight="400">claude -p</text>
 
-  <path d="M518 178 H702" stroke="#1b1914" stroke-width="2" fill="none"/>
-  <path d="M690 172 L704 178 L690 184" fill="#1b1914"/>
-  <text x="610" y="166" text-anchor="middle" fill="#5f584e" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13">agent</text>
+  <path d="M218 214 H382" stroke="#1b1914" stroke-width="2" fill="none"/>
+  <path d="M370 208 L384 214 L370 220" fill="#1b1914"/>
+  <text x="300" y="202" text-anchor="middle" fill="#5f584e" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13" font-weight="400">message</text>
 
-  <path d="M760 254 C 760 348, 160 348, 160 254" stroke="#8a5a2b" stroke-width="2.5" fill="none"/>
-  <path d="M154 270 L160 252 L166 270" fill="#8a5a2b"/>
-  <text x="460" y="378" text-anchor="middle" fill="#8a5a2b" font-family="ui-sans-serif, system-ui, sans-serif" font-size="15" font-weight="700">the same message is edited as the work happens</text>
+  <path d="M500 190 C 580 150, 640 150, 716 150" stroke="#1b1914" stroke-width="2" fill="none"/>
+  <path d="M704 144 L718 150 L704 156" fill="#1b1914"/>
+  <path d="M500 238 C 580 280, 640 282, 716 282" stroke="#8a5a2b" stroke-width="2" fill="none"/>
+  <path d="M704 276 L718 282 L704 288" fill="#8a5a2b"/>
+  <text x="620" y="132" text-anchor="middle" fill="#5f584e" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13" font-weight="400">/cli cursor</text>
+  <text x="600" y="320" text-anchor="middle" fill="#8a5a2b" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13" font-weight="400">/cli claude</text>
 
-  <text x="160" y="418" text-anchor="middle" fill="#5f584e" font-family="ui-sans-serif, system-ui, sans-serif" font-size="14">private chat</text>
-  <text x="460" y="418" text-anchor="middle" fill="#5f584e" font-family="ui-sans-serif, system-ui, sans-serif" font-size="14">queue survives a restart</text>
-  <text x="760" y="418" text-anchor="middle" fill="#5f584e" font-family="ui-sans-serif, system-ui, sans-serif" font-size="14">files, shell, and git</text>
+  <path d="M770 332 C 770 410, 160 410, 160 276" stroke="#8a5a2b" stroke-width="2.5" fill="none"/>
+  <path d="M154 292 L160 274 L166 292" fill="#8a5a2b"/>
+  <text x="465" y="438" text-anchor="middle" fill="#8a5a2b" font-family="ui-sans-serif, system-ui, sans-serif" font-size="15" font-weight="700">the same message is edited as the work happens</text>
+  <rect x="330" y="98" width="240" height="30" rx="15" fill="#fffdf8" stroke="#d8cdb6"/>
+  <text x="450" y="118" text-anchor="middle" fill="#5f584e" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13" font-weight="400">setup page · 127.0.0.1 only</text>
 </svg>
