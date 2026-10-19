@@ -1,5 +1,7 @@
 # Telegram Agent
 
+[![Tests](https://github.com/arslan77/telegram-agent/actions/workflows/tests.yml/badge.svg)](https://github.com/arslan77/telegram-agent/actions/workflows/tests.yml) ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue) ![No dependencies](https://img.shields.io/badge/dependencies-none-success)
+
 A private Telegram bot that runs a coding agent on your own computer. You message the bot. [Cursor](https://cursor.com/docs/cli/overview) or [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) edits files, runs commands, and answers in that same chat. The bot only makes outbound calls to Telegram, so the computer does not open a port.
 
 ![A Telegram chat where you send a task and one reply edits itself as the agent reads files, runs a command, and finishes](docs/chat-demo.svg)
