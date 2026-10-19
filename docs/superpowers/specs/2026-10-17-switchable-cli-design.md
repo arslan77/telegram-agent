@@ -42,7 +42,7 @@ The switch is stored by the running bot and read for every new message. Changing
 
 The pages are served by the bot. They are not a second program. The token and the phone list stay in the same private env file they use now. The setup page writes that file. It does not put secrets in the repo.
 
-Cursor remains the default when someone never opens the page and the env file is already filled in, which is how this machine and the Pakistan laptop work today.
+Cursor remains the default when someone never opens the page and the env file is already filled in, which is how the existing headless machines work today.
 
 `/model` keeps choosing the Cursor model. Claude Code uses its own default until a later change adds a model field for it.
 
@@ -91,9 +91,9 @@ It is a weak fit for the conversation. Telegram is already that conversation, wi
 
 This is the one that fits. The bot you already run grows a chat page. There is no second application and no new language. A message typed in the browser enters the same queue as a Telegram message. The same Cursor or Claude Code session answers it. The page shows the same live status the Telegram message already edits.
 
-Remote access uses the tailnet you already have. This machine is `alienware-lab`, the Pakistan laptop is `redcode`, and the phone is on that tailnet too. The chat listens on the tailnet address only. It does not listen on the public internet. No static IP and no open port on the router.
+Remote access uses the tailnet you already have. The bot machine, the second laptop, and the phone are all on that tailnet. The chat listens on the tailnet address only. It does not listen on the public internet. No static IP and no open port on the router.
 
-The setup page stays on localhost. That is the page that accepts the bot token. The chat page is the one reached from the phone or the other laptop.
+The setup page stays on localhost. That is the page that accepts the bot token. The chat page is the one reached from the phone or the second laptop.
 
 Who can open the chat: a device on this tailnet. That is the same set of machines you already approved. A stranger on the internet cannot open it.
 

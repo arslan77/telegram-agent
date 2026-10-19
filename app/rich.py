@@ -65,7 +65,8 @@ def rich_status_heading(model: str, project: str, session: str, elapsed: int | N
         icon = "⏳" if running else "⌛"
         clock = f" · {icon} {max(0, elapsed)}s"
     if title:
-        return f"> **{title}** · `{name.replace('`', "'")}`{clock}"
+        safe_name = name.replace("`", "'")
+        return f"> **{title}** · `{safe_name}`{clock}"
     return f"> **{escape_rich_text(name)}**{clock}"
 
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Install the local Cursor CLI if needed, write the private env file, and start the user service.
+# Install uv and the Cursor CLI if needed, write the private env file, and start the user service.
+# Safe to run again: with no .env in the checkout it keeps the existing env file.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 export PATH="${HOME}/.local/bin:${PATH}"
@@ -64,12 +65,10 @@ lines = {
     "TELEGRAM_BOT_TOKEN": token,
     "TELEGRAM_ALLOWED_PHONES": ",".join(numbers),
 }
-workspace = values.get("CURSOR_WORKSPACE", "").strip()
-model = values.get("CURSOR_MODEL", "").strip()
-if workspace:
-    lines["CURSOR_WORKSPACE"] = workspace
-if model:
-    lines["CURSOR_MODEL"] = model
+for optional in ("CURSOR_WORKSPACE", "CURSOR_MODEL", "CLAUDE_MODEL"):
+    value = values.get(optional, "").strip()
+    if value:
+        lines[optional] = value
 
 safe = re.compile(r"[A-Za-z0-9_./:+@,-]+")
 for key, value in lines.items():

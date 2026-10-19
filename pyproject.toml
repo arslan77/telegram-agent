@@ -1,7 +1,7 @@
 [project]
-name = "cursor-telegram"
+name = "telegram-agent"
 version = "0.1.0"
-description = "Telegram bridge to a local Cursor CLI session"
+description = "Private Telegram bot that runs Cursor or Claude Code on your own computer"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = []

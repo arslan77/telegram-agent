@@ -25,54 +25,42 @@ The default folder is your home directory. `/workspace` can move it anywhere ins
 | Cursor CLI | The `agent` command, signed in to a Cursor account. Required, since Cursor is the default. |
 | Claude Code | The `claude` command at `~/.local/bin/claude`, signed in. Optional. Needed only for `/cli claude`. |
 | Telegram bot | A token from [@BotFather](https://t.me/BotFather), and the phone numbers allowed to use it. |
-| uv | Installs the Python version and runs the bot. The bot itself uses the Python standard library only. |
+| git and uv | `git` to clone and upgrade. uv installs Python and runs the bot. The bot itself uses the Python standard library only, with no third-party packages. |
 | Linux systemd | Optional. `scripts/install.sh` keeps the bot running as a user service. You can also run it in the foreground. |
 
-Python 3.11 or newer is required. uv selects it.
+## Install
 
-## Setup
-
-1. Install [uv](https://docs.astral.sh/uv/getting-started/installation/).
-
-2. Install the Cursor CLI and sign in:
+Linux with systemd, in about five minutes. On macOS, or without systemd, skip `install.sh` and see [Run in the foreground](#run-in-the-foreground).
 
 ```bash
-curl -fsSL https://cursor.com/install | bash
-./scripts/login.sh
-```
-
-`login.sh` prints a URL. Open it and approve this computer. Leave the command running until it finishes. To use Claude Code too, install it and run `claude auth login`, or sign in later from the setup page.
-
-3. Clone this repo and sync the Python project:
-
-```bash
-uv sync
-```
-
-4. In Telegram, open @BotFather, send `/newbot`, and copy the token.
-
-5. Copy the example env file and fill it in:
-
-```bash
-cp .env.example .env
-```
-
-```bash
-TELEGRAM_BOT_TOKEN=123456:replace-me
-TELEGRAM_ALLOWED_PHONES=+15551234567
-```
-
-Use full international numbers, comma-separated. `CURSOR_WORKSPACE` is optional. When it is set, it must be a folder inside your home directory. `CURSOR_MODEL` and `CLAUDE_MODEL` set the starting model for each tool.
-
-6. Install and start the service:
-
-```bash
+git clone https://github.com/arslan77/telegram-agent.git
+cd telegram-agent
+cp .env.example .env    # then fill in TELEGRAM_BOT_TOKEN and TELEGRAM_ALLOWED_PHONES
 ./scripts/install.sh
+./scripts/login.sh      # signs Cursor in. Open the link it prints.
 ```
 
-This writes `~/.config/cursor-telegram/env` with mode `600`, installs a systemd user service, and starts it. The token and phone list are not committed.
+Then open your bot in Telegram, tap **Share my phone number**, and send a task.
 
-7. Open the bot, tap **Share my phone number**, then send a task.
+What each step needs:
+
+1. **A bot token.** In Telegram, open [@BotFather](https://t.me/BotFather), send `/newbot`, and copy the token into `.env`.
+
+2. **Your phone number.** `TELEGRAM_ALLOWED_PHONES` takes full international numbers, comma-separated. Only these numbers can use the bot. Optional settings in `.env`: `CURSOR_WORKSPACE` (a folder inside your home directory), `CURSOR_MODEL` and `CLAUDE_MODEL` (the starting model for each tool).
+
+3. **`install.sh`** installs [uv](https://docs.astral.sh/uv/) and the Cursor CLI if they are missing, writes `~/.config/cursor-telegram/env` with mode `600`, installs a systemd user service, and starts it. The token and phone list never enter the repo. It is safe to run again.
+
+4. **`login.sh`** runs the Cursor CLI's own sign-in. Leave it running until it says you are signed in. To use Claude Code too, install it and run `claude auth login`, or sign in later from the [setup page](#setup-page).
+
+Python 3.11 or newer is required. uv installs it for you.
+
+## Upgrade
+
+```bash
+./scripts/upgrade.sh
+```
+
+This pulls the latest version from GitHub, re-syncs Python, and restarts the service. Your token, allowlist and bot state are kept. A message in progress is interrupted and continues after the restart. If you changed files in the checkout, the script stops and asks you to commit or stash them first.
 
 ## Setup page
 
@@ -120,12 +108,15 @@ Use `/mode ask` or `/mode plan` when you want the agent to stop editing.
 
 ## Run in the foreground
 
+Any OS with the Cursor CLI, including macOS. No systemd needed. Fill in `.env`, then:
+
 ```bash
-set -a && source ~/.config/cursor-telegram/env && set +a
+uv sync
+set -a && source .env && set +a
 uv run python bot.py
 ```
 
-Run `scripts/install.sh` once so that env file exists, or export the same variables yourself.
+Ctrl-C stops it. On a machine where `install.sh` already ran, source `~/.config/cursor-telegram/env` instead of `.env`.
 
 ## Tests
 
